@@ -181,6 +181,8 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     (it operates on surface of a sphere)
 
     The center of img must be forward direction (i.e. img must not be cropped)
+
+    return (xs, ys) | None
     """
     hfov, vps = detect_board_vps(photo_id, img, lines, visualize)
     # Convert weak lines to normals of great circles.
@@ -285,7 +287,10 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
             cv2.line(img_debug, (0, y), (1000, y), (0, 255, 0), thickness=3)
         cv2.imwrite('debug/%s-grid.png' % photo_id, img_debug)
 
-
+    if len(xs) == 10 and len(ys) == 10:
+        return (xs, ys)
+    else:
+        return None
 
 
 
@@ -359,7 +364,10 @@ def detect_board(photo_id, img, visualize):
             draw_rhotheta_line(img_gray_w_lines, line, (0, 0, 255))
         cv2.imwrite('debug/%s-raw-lines.png' % photo_id, img_gray_w_lines)
 
-    detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
+    pat = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
+    if pat is None:
+        return False
+    print('Detected keys', pat)
     return True
 
 
@@ -371,9 +379,20 @@ def process_image(packed_args):
         print('processing %s: id=%s shape=%s' % (img_path, photo_id, img.shape))
         detected = detect_board(str(photo_id), img, True)
         if not detected:
+            return {
+                "loaded": 1
+            }
             print('->failed')
+        else:
+            return {
+                "loaded": 1,
+                "success": 1
+            }
     except:
         traceback.print_exc()
+        return {
+            "crash": 1
+        }
 
 
 if __name__ == '__main__':
@@ -396,4 +415,10 @@ Extract 9x9 cells from photos of shogi board.""",
     # HACK: receive keyboard interrupt correctly
     # https://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
     ls = [(photo_id, os.path.join(dir_path, p)) for (photo_id, p) in enumerate(os.listdir(dir_path))]
-    pool.map_async(process_image, ls).get(1000)
+    results = pool.map_async(process_image, ls).get(1000)
+
+    count = {}
+    for result in results:
+        for (k, v) in result.items():
+            count[k] = count.get(k, 0) + v
+    print(count)
