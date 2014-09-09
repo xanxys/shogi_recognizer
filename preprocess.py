@@ -242,7 +242,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         np.array(pts_photo).astype(np.float32), np.array(pts_correct).astype(np.float32))
     # Correct perspectiveness.
     # This will result in orthogonal image with elongation.
-    img_depersp = cv2.warpPerspective(img, trans_persp, (depersp_size, depersp_size))
+    img_depersp = cv2.warpPerspective(img, trans_persp, (depersp_size, depersp_size), borderMode=cv2.BORDER_REPLICATE)
     if la.det(trans_persp) < 0:
         img_depersp = img_depersp[:, ::-1, :]
     if visualize:
