@@ -438,7 +438,7 @@ Extract 9x9 cells from photos of shogi board.""",
     pool = multiprocessing.Pool(args.j)
     # HACK: receive keyboard interrupt correctly
     # https://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-    ls = [(photo_id, os.path.join(dir_path, p)) for (photo_id, p) in enumerate(os.listdir(dir_path))]
+    ls = [(os.path.splitext(p)[0], os.path.join(dir_path, p)) for p in os.listdir(dir_path)]
     results = pool.map_async(process_image, ls).get(1000)
 
     count = {}
