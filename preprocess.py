@@ -152,7 +152,6 @@ def find_9segments(xs, valid_width_range):
         for x in xs:
             t = (x - x0) / dx
             key = round(t)
-            
             dt = abs(t - key)
             if dt < ratio_thresh:
                 segs.setdefault(key, []).append(x)
@@ -288,11 +287,9 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         cv2.imwrite('debug/%s-grid.png' % photo_id, img_debug)
 
     if len(xs) == 10 and len(ys) == 10:
-        return (xs, ys)
+        return (img_depersp, xs, ys)
     else:
         return None
-
-
 
 
 def detect_lines(img_bin, num_lines_target, n_iterations=5):
@@ -367,7 +364,30 @@ def detect_board(photo_id, img, visualize):
     pat = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
     if pat is None:
         return False
-    print('Detected keys', pat)
+    i, xs, ys = pat
+    margin = 0.1
+    patches = []
+    patch_size = 80
+    for (ix, (x0, x1)) in enumerate(zip(xs, xs[1:])):
+        dx = x1 - x0
+        x0 = int(x0 - dx * margin)
+        x1 = int(x1 + dx * margin)
+        for (iy, (y0, y1)) in enumerate(zip(ys, ys[1:])):
+            dy = y1 - y0
+            y0 = int(y0 - dy * margin)
+            y1 = int(y1 + dy * margin)
+
+            patches.append({
+                "pos": (ix, iy),
+                "image": cv2.resize(i[y0:y1, x0:x1], (patch_size, patch_size))
+            })
+
+    if visualize:
+        for patch in patches:
+            cv2.imwrite(
+                "debug/patch-%s-%d-%d.png" % (photo_id, patch["pos"][0], patch["pos"][1]),
+                patch["image"])
+
     return True
 
 
