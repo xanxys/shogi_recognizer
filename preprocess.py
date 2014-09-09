@@ -330,7 +330,6 @@ def draw_rhotheta_line(img, line, color):
     p1 = tuple((l_org + l_dir * 2000).astype(int))
     cv2.line(img, p0, p1, color, lineType=cv.CV_AA)
 
-
 def detect_board(photo_id, img, visualize):
     """
     * photo_id: str
@@ -368,10 +367,53 @@ def detect_board(photo_id, img, visualize):
     pat = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
     if pat is None:
         return False
-    i, xs, ys = pat
+    depersp_img, xs, ys = pat
     margin = 0.1
-    patches = []
+    patches = {}
     patch_size = 80
+    # top-left = (0,0)
+    initial_state_top = {
+        (1, 1): "KY",
+        (2, 1): "KE",
+        (3, 1): "GI",
+        (4, 1): "KI",
+        (5, 1): "OU",
+        (6, 1): "KI",
+        (7, 1): "GI",
+        (8, 1): "KE",
+        (9, 1): "KY",
+        (2, 2): "KA",
+        (8, 2): "HI",
+        (1, 3): "FU",
+        (2, 3): "FU",
+        (3, 3): "FU",
+        (4, 3): "FU",
+        (5, 3): "FU",
+        (6, 3): "FU",
+        (7, 3): "FU",
+        (8, 3): "FU",
+        (9, 3): "FU",
+    }
+    initial_state = {}
+    for (pos, ty) in initial_state_top.items():
+        x, y = pos
+        initial_state[pos] = ty
+        initial_state[(10 - x, 10 - y)] = ty
+
+    # Calculate rotation-invariant locations
+    common_occupied = []
+    common_empty = []
+    for i in range(1, 10):
+        for j in range(1, 10):
+            p = (i, j)
+            pt = (j, i)
+            if p in initial_state and pt in initial_state:
+                common_occupied.append(p)
+            elif p not in initial_state and pt not in initial_state:
+                common_empty.append(p)
+    print('Rot-invariant empty=%s occupied=%s' % (common_empty, common_occupied))
+
+    pid_blacklist = set(["vy", "z", "b", "9", "2", "1"])
     for (ix, (x0, x1)) in enumerate(zip(xs, xs[1:])):
         dx = x1 - x0
         x0 = int(x0 - dx * margin)
@@ -381,16 +423,25 @@ def detect_board(photo_id, img, visualize):
             y0 = int(y0 - dy * margin)
             y1 = int(y1 + dy * margin)
 
-            patches.append({
-                "pos": (ix, iy),
-                "image": cv2.resize(i[y0:y1, x0:x1], (patch_size, patch_size))
-            })
+            patches[(ix + 1, iy + 1)] = {
+                "image": cv2.resize(depersp_img[y0:y1, x0:x1], (patch_size, patch_size))
+            }
 
     if visualize:
-        for patch in patches:
+        for (pos, patch) in patches.items():
             cv2.imwrite(
-                "debug/patch-%s-%d-%d.png" % (photo_id, patch["pos"][0], patch["pos"][1]),
+                "debug/patch-%s-%d%d.png" % (photo_id, pos[0], pos[1]),
                 patch["image"])
+
+    if photo_id not in pid_blacklist:
+        for pos in common_empty:
+            cv2.imwrite(
+                'derived/cell-empty/%s-%d%d.png' % (photo_id, pos[0], pos[1]),
+                patches[pos]["image"])
+        for pos in common_occupied:
+            cv2.imwrite(
+                'derived/cell-occupied/%s-%d%d.png' % (photo_id, pos[0], pos[1]),
+                patches[pos]["image"])
 
     return True
 
