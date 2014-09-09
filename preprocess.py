@@ -51,18 +51,12 @@ def point_to_direction(focal_px, center, pt):
     return d
 
 
-def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
+def detect_board_vps(photo_id, img, lines, visualize):
     """
-    Detect shogi board pattern in lines.
+    Detect 2 VPs of shogi board in img.
+    VPs are represented as unit 3D vector in camera coordinates.
 
-    * img: size reference and background for visualization
-    * lines: strong lines which is used to initialize VPs
-    * lines_weak: lines used to guess final board. must contain all grid lines
-
-    Use "3-line RANSAC" with variable hfov.
-    (it operates on surface of a sphere)
-
-    The center of img must be forward direction (i.e. img must not be cropped)
+    return (hfov, (VP0, VP1))
     """
     assert(len(lines) >= 4)
     hfov_min = 0.2
@@ -137,7 +131,57 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
                 p1 = tuple((l_org + l_dir * 2000).astype(int))
                 cv2.line(img_vps, p0, p1, color, lineType=cv.CV_AA)
         cv2.imwrite('debug/%s-vps.png' % photo_id, img_vps)
+    return (max_fov, max_ns)
 
+
+def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
+    """
+    Detect shogi board pattern in lines.
+
+    * img: size reference and background for visualization
+    * lines: strong lines which is used to initialize VPs
+    * lines_weak: lines used to guess final board. must contain all grid lines
+
+    Use "3-line RANSAC" with variable hfov.
+    (it operates on surface of a sphere)
+
+    The center of img must be forward direction (i.e. img must not be cropped)
+    """
+    hfov, vps = detect_board_vps(photo_id, img, lines, visualize)
+    # Convert weak lines to normals of great circles.
+    focal_px = img.shape[0] / 2 / math.tan(hfov / 2)
+    center = np.array([img.shape[1], img.shape[0]]) / 2
+    lines_weak_normals = []
+    for line in lines_weak:
+        l_org, l_dir = rhotheta_to_cartesian(*line)
+        p0 = point_to_direction(focal_px, center, l_org - l_dir * 100)
+        p1 = point_to_direction(focal_px, center, l_org + l_dir * 100)
+        n = np.cross(p0, p1)
+        n /= la.norm(n)
+        lines_weak_normals.append(n)
+    # Classify
+    vp0, vp1 = vps
+    inliers0 = []
+    inliers1 = []
+    dist_thresh = 0.01
+    for (lorg, ln) in zip(lines_weak, lines_weak_normals):
+        dist0 = abs(math.asin(np.dot(ln, vp0)))
+        dist1 = abs(math.asin(np.dot(ln, vp1)))
+        if dist0 < dist_thresh and dist1 < dist_thresh:
+            continue
+        if dist0 < dist_thresh:
+            inliers0.append(lorg)
+        if dist1 < dist_thresh:
+            inliers1.append(lorg)
+    if visualize:
+        img_vps = np.copy(img)
+        for (inliers, color) in [(inliers0, (0, 0, 255)), (inliers1, (0, 255, 0))]:
+            for (rho, theta) in inliers:
+                l_org, l_dir = rhotheta_to_cartesian(rho, theta)
+                p0 = tuple((l_org - l_dir * 2000).astype(int))
+                p1 = tuple((l_org + l_dir * 2000).astype(int))
+                cv2.line(img_vps, p0, p1, color, lineType=cv.CV_AA)
+        cv2.imwrite('debug/%s-vps-weak.png' % photo_id, img_vps)
 
 
 
