@@ -11,6 +11,7 @@ import os.path
 import random
 import multiprocessing
 import traceback
+import itertools
 
 
 def rhotheta_to_cartesian(rho, theta):
@@ -143,8 +144,8 @@ def find_9segments(xs, valid_width_range):
     n_iter = 3000
     ratio_thresh = 0.05
     spl_xs = None
-    for i in range(n_iter):
-        x0, x1 = random.sample(xs, 2)
+    for (x0, x1) in itertools.combinations(xs, 2):
+        #x0, x1 = random.sample(xs, 2)
         dx = abs(x1 - x0)
         if not (min_dx <= dx <= max_dx):
             continue
@@ -222,6 +223,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         print('Angle too far from orthogonal')
         return None
     depersp_size = 900
+    margin = 25
     inliers0.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir1))
     inliers1.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir0))
     lxs = [inliers0[0], inliers0[-1]]
@@ -230,7 +232,9 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     pts_correct = []
     for (ix, iy) in [(0, 0), (0, 1), (1, 1), (1, 0)]:
         pts_photo.append(intersect_lines(lxs[ix], lys[iy]))
-        pts_correct.append(np.array([ix * depersp_size,iy * depersp_size]))
+        pts_correct.append(np.array([
+            margin + ix * (depersp_size - 2 * margin),
+            margin + iy * (depersp_size - 2 * margin)]))
     trans_persp = cv2.getPerspectiveTransform(
         np.array(pts_photo).astype(np.float32), np.array(pts_correct).astype(np.float32))
     # Correct perspectiveness.
@@ -266,20 +270,16 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     xs = map(lambda line: rhotheta_to_cartesian(*line)[0][0], ls_x)
     ys = map(lambda line: rhotheta_to_cartesian(*line)[0][1], ls_y)
     # Supply edges (which may or may not be gone in warping process)
-    xs.append(0)
-    xs.append(depersp_size)
-    ys.append(0)
-    ys.append(depersp_size)
     xs = find_9segments(xs, (min_dx, max_dx))
     ys = find_9segments(xs, (min_dx, max_dx))
     if visualize:
         img_debug = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR)
         for x in xs:
             x = int(x)
-            cv2.line(img_debug, (x, 0), (x, 1000), (0, 0, 255))
+            cv2.line(img_debug, (x, 0), (x, 1000), (0, 0, 255), thickness=3)
         for y in ys:
             y = int(y)
-            cv2.line(img_debug, (0, y), (1000, y), (0, 255, 0))
+            cv2.line(img_debug, (0, y), (1000, y), (0, 255, 0), thickness=3)
         cv2.imwrite('debug/%s-grid.png' % photo_id, img_debug)
 
 
