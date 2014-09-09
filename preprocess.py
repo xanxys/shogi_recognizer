@@ -107,8 +107,6 @@ def detect_board_vps(photo_id, img, lines, visualize):
                 if dist0 < dist_thresh or dist1 < dist_thresh:
                     n_inliers += 1
             if n_inliers > max_n_inliers:
-                max_n_inliers = n_inliers
-                max_ns = (n0, n1)
                 inl0 = []
                 inl1 = []
                 for (lorg, ln) in zip(lines, lines_normals):
@@ -120,6 +118,15 @@ def detect_board_vps(photo_id, img, lines, visualize):
                         inl0.append(lorg)
                     if dist1 < dist_thresh:
                         inl1.append(lorg)
+                # Final validation
+                # avoid bundled line segments;
+                # probably they're some singularity
+                if np.std(np.array(inl0)[:, 0]) < 20:
+                    continue
+                if np.std(np.array(inl1)[:, 0]) < 20:
+                    continue
+                max_n_inliers = n_inliers
+                max_ns = (n0, n1)
                 max_inliers = (inl0, inl1)
                 max_fov = hfov
     print("Max: fov=%.1f #inl=%d axis=%s" % (max_fov, max_n_inliers, max_ns))
