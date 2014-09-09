@@ -138,29 +138,32 @@ def find_9segments(xs, valid_width_range):
     return: 10 values in increasing order
     """
     min_dx, max_dx = valid_width_range
-    # Assume 10 of 100 lines are correct.
-    # Probability of choosing correct pair = 9 / C(100, 2) = 0.0018
-    # 3000 trials: failure rate < 0.0045
-    n_iter = 3000
-    ratio_thresh = 0.05
+    ratio_thresh = 0.08
     spl_xs = None
+    n_gp = 0
+    xs.sort()
     for (x0, x1) in itertools.combinations(xs, 2):
         #x0, x1 = random.sample(xs, 2)
-        dx = abs(x1 - x0)
+        dx = abs(x1 - x0) / 9
         if not (min_dx <= dx <= max_dx):
             continue
+        n_gp += 1
         segs = {}
         for x in xs:
             t = (x - x0) / dx
-            dt = abs(t - int(t))
+            key = round(t)
+            
+            dt = abs(t - key)
             if dt < ratio_thresh:
-                segs.setdefault(int(t), []).append(x)
+                segs.setdefault(key, []).append(x)
 
         if len(segs) == 10 and max(segs.keys()) - min(segs.keys()) + 1 == 10:
             print('Seems ok')
+            print('Good Pairs(premature)', n_gp)
             spl_xs = segs
             break
     else:
+        print('Good Pairs', n_gp)
         return []
 
     return map(lambda e: e[0], spl_xs.values())
@@ -265,13 +268,13 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         print('WARN: not enough XY lines')
         return None
     # Detect repetition in each axis
-    min_dx = depersp_size / 2 / 9  # assume at least half of the image is covered by board
-    max_dx = depersp_size / 9
+    min_dx = (depersp_size - margin * 2) / 2 / 9  # assume at least half of the image is covered by board
+    max_dx = (depersp_size - margin * 2) / 9
     xs = map(lambda line: rhotheta_to_cartesian(*line)[0][0], ls_x)
     ys = map(lambda line: rhotheta_to_cartesian(*line)[0][1], ls_y)
     # Supply edges (which may or may not be gone in warping process)
     xs = find_9segments(xs, (min_dx, max_dx))
-    ys = find_9segments(xs, (min_dx, max_dx))
+    ys = find_9segments(ys, (min_dx, max_dx))
     if visualize:
         img_debug = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR)
         for x in xs:
