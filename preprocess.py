@@ -131,6 +131,40 @@ def detect_board_vps(photo_id, img, lines, visualize):
     return (max_fov, max_ns)
 
 
+def find_9segments(xs, valid_width_range):
+    """
+    Find 10 values (with 9 intervals) in array of scalars.
+    return: 10 values in increasing order
+    """
+    min_dx, max_dx = valid_width_range
+    # Assume 10 of 100 lines are correct.
+    # Probability of choosing correct pair = 9 / C(100, 2) = 0.0018
+    # 3000 trials: failure rate < 0.0045
+    n_iter = 3000
+    ratio_thresh = 0.05
+    spl_xs = None
+    for i in range(n_iter):
+        x0, x1 = random.sample(xs, 2)
+        dx = abs(x1 - x0)
+        if not (min_dx <= dx <= max_dx):
+            continue
+        segs = {}
+        for x in xs:
+            t = (x - x0) / dx
+            dt = abs(t - int(t))
+            if dt < ratio_thresh:
+                segs.setdefault(int(t), []).append(x)
+
+        if len(segs) == 10 and max(segs.keys()) - min(segs.keys()) + 1 == 10:
+            print('Seems ok')
+            spl_xs = segs
+            break
+    else:
+        return []
+
+    return map(lambda e: e[0], spl_xs.values())
+
+
 def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     """
     Detect shogi board pattern in lines.
@@ -226,40 +260,26 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     if len(ls_x) < 10 or len(ls_y) < 10:
         print('WARN: not enough XY lines')
         return None
-    # Assume 10 of 100 lines are correct.
-    # Probability of choosing correct pair = 9 / C(100, 2) = 0.0018
-    # 3000 trials: failure rate < 0.0045
-    n_iter = 3000
+    # Detect repetition in each axis
     min_dx = depersp_size / 2 / 9  # assume at least half of the image is covered by board
     max_dx = depersp_size / 9
     xs = map(lambda line: rhotheta_to_cartesian(*line)[0][0], ls_x)
+    ys = map(lambda line: rhotheta_to_cartesian(*line)[0][1], ls_y)
     # Supply edges (which may or may not be gone in warping process)
     xs.append(0)
     xs.append(depersp_size)
-    ratio_thresh = 0.05
-    spl_xs = None
-    for i in range(n_iter):
-        x0, x1 = random.sample(xs, 2)
-        dx = abs(x1 - x0)
-        if not (min_dx <= dx <= max_dx):
-            continue
-        segs = {}
-        for x in xs:
-            t = (x - x0) / dx
-            dt = abs(t - int(t))
-            if dt < ratio_thresh:
-                segs.setdefault(int(t), []).append(x)
-
-        if len(segs) == 10 and max(segs.keys()) - min(segs.keys()) + 1 == 10:
-            print('Seems ok')
-            spl_xs = segs
-            break
+    ys.append(0)
+    ys.append(depersp_size)
+    xs = find_9segments(xs, (min_dx, max_dx))
+    ys = find_9segments(xs, (min_dx, max_dx))
     if visualize:
         img_debug = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR)
-        if spl_xs is not None:
-            for (key, xs) in spl_xs.items():
-                print(key, xs)
-                cv2.line(img_debug, (int(xs[0]), 0), (int(xs[0]), 1000), (0, 0, 255))
+        for x in xs:
+            x = int(x)
+            cv2.line(img_debug, (x, 0), (x, 1000), (0, 0, 255))
+        for y in ys:
+            y = int(y)
+            cv2.line(img_debug, (0, y), (1000, y), (0, 255, 0))
         cv2.imwrite('debug/%s-grid.png' % photo_id, img_debug)
 
 
