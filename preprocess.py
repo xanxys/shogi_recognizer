@@ -93,6 +93,9 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
             n0 /= la.norm(n0)
             # Second VP
             n1 = np.cross(n0, line_tri[2])
+            # smaller sin is good.
+            if la.norm(n1) > 0.9:
+                continue  # ignore unreliable sample
             n1 /= la.norm(n1)
             # Calculate inliers.
             # (Since images will contain less height component,
@@ -111,18 +114,14 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
                 inl0 = []
                 inl1 = []
                 for (lorg, ln) in zip(lines, lines_normals):
-                    counted = False
                     dist0 = abs(math.asin(np.dot(ln, n0)))
                     dist1 = abs(math.asin(np.dot(ln, n1)))
                     if dist0 < dist_thresh and dist1 < dist_thresh:
                         continue
                     if dist0 < dist_thresh:
                         inl0.append(lorg)
-                        counted = True
                     if dist1 < dist_thresh:
                         inl1.append(lorg)
-                        if counted:
-                            print('DUPLICATE')
                 max_inliers = (inl0, inl1)
                 max_fov = hfov
     print("Max: fov=%.1f #inl=%d axis=%s" % (max_fov, max_n_inliers, max_ns))
@@ -193,7 +192,7 @@ def detect_board(photo_id, img, visualize):
     if visualize:
         cv2.imwrite('debug/%s-binary.png' % photo_id, img_bin)
     # Detect lines. None or [[(rho,theta)]]
-    lines = detect_lines(img_bin, 20, 10)
+    lines = detect_lines(img_bin, 30, 10)
     lines_weak = detect_lines(img_bin, 1000)
     if visualize:
         img_gray_w_lines = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR) * 0
