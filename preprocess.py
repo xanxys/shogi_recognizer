@@ -182,7 +182,34 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
                 p1 = tuple((l_org + l_dir * 2000).astype(int))
                 cv2.line(img_vps, p0, p1, color, lineType=cv.CV_AA)
         cv2.imwrite('debug/%s-vps-weak.png' % photo_id, img_vps)
-
+    # Any pairs of X and Y lines will form a rectangle.
+    # (Unless they're really small)
+    #      ly0   ly1  (orders vary)
+    # lx0   -------
+    #       |      |
+    # lx1   -------
+    dir0 = rhotheta_to_cartesian(*inliers0[0])[1]
+    dir1 = rhotheta_to_cartesian(*inliers1[0])[1]
+    if abs(np.dot(dir0, dir1)) > 0.5:
+        print('Angle too far from orthogonal')
+        return None
+    depersp_size = 900
+    inliers0.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir1))
+    inliers1.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir0))
+    lxs = [inliers0[0], inliers0[-1]]
+    lys = [inliers1[0], inliers1[-1]]
+    pts_photo = []
+    pts_correct = []
+    for (ix, iy) in [(0, 0), (0, 1), (1, 1), (1, 0)]:
+        pts_photo.append(intersect_lines(lxs[ix], lys[iy]))
+        pts_correct.append(np.array([ix * depersp_size,iy * depersp_size]))
+    trans_persp = cv2.getPerspectiveTransform(
+        np.array(pts_photo).astype(np.float32), np.array(pts_correct).astype(np.float32))
+    # Correct perspectiveness.
+    # This will result in orthogonal image with elongation.
+    img_depersp = cv2.warpPerspective(img, trans_persp, (depersp_size, depersp_size))
+    if visualize:
+        cv2.imwrite('debug/%s-depersp.png' % photo_id, img_depersp)
 
 
 
