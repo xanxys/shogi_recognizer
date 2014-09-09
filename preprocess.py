@@ -208,6 +208,8 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     # Correct perspectiveness.
     # This will result in orthogonal image with elongation.
     img_depersp = cv2.warpPerspective(img, trans_persp, (depersp_size, depersp_size))
+    if la.det(trans_persp) < 0:
+        img_depersp = img_depersp[:, ::-1, :]
     if visualize:
         cv2.imwrite('debug/%s-depersp.png' % photo_id, img_depersp)
 
@@ -228,7 +230,6 @@ def detect_lines(img_bin, num_lines_target, n_iterations=5):
     for i in range(n_iterations):
         lines = cv2.HoughLines(img_bin, 2, 0.01, int(vote_thresh))
         n_lines = 0 if lines is None else len(lines[0])
-        print(i, n_lines)
         if n_lines < num_lines_target * 0.7:
             vote_thresh *= change_rate
         elif n_lines > num_lines_target * 1.3:
@@ -236,6 +237,8 @@ def detect_lines(img_bin, num_lines_target, n_iterations=5):
         else:
             break
         change_rate = change_rate * 0.9 + 0.1
+    else:
+        print("WARN Target(%d) != Achieved(%d)" % (num_lines_target, n_lines))
     assert(lines is not None)
     return lines[0]
 
