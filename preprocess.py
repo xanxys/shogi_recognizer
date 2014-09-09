@@ -84,7 +84,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
 
         # Use 3-RANSAC
         n_iter_vp = 3000
-        dist_cos_thresh = 0.005  # math.cos(math.pi / 2 - (hfov_max - hfov_min) / n_hfov_step / 2)
+        dist_thresh = 0.01
 
         for i in range(n_iter_vp):
             line_tri = random.sample(lines_normals, 3)
@@ -99,8 +99,11 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
             # we ignore 3rd VP.)
             n_inliers = 0
             for ln in lines_normals:
-                dist = min(abs(np.dot(ln, n0)), abs(np.dot(ln, n1)))
-                if dist < dist_cos_thresh:
+                dist0 = abs(math.asin(np.dot(ln, n0)))
+                dist1 = abs(math.asin(np.dot(ln, n1)))
+                if dist0 < dist_thresh and dist1 < dist_thresh:
+                    continue
+                if dist0 < dist_thresh or dist1 < dist_thresh:
                     n_inliers += 1
             if n_inliers > max_n_inliers:
                 max_n_inliers = n_inliers
@@ -108,10 +111,18 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
                 inl0 = []
                 inl1 = []
                 for (lorg, ln) in zip(lines, lines_normals):
-                    if abs(np.dot(ln, n0)) < dist_cos_thresh:
+                    counted = False
+                    dist0 = abs(math.asin(np.dot(ln, n0)))
+                    dist1 = abs(math.asin(np.dot(ln, n1)))
+                    if dist0 < dist_thresh and dist1 < dist_thresh:
+                        continue
+                    if dist0 < dist_thresh:
                         inl0.append(lorg)
-                    elif abs(np.dot(ln, n1)) < dist_cos_thresh:
+                        counted = True
+                    if dist1 < dist_thresh:
                         inl1.append(lorg)
+                        if counted:
+                            print('DUPLICATE')
                 max_inliers = (inl0, inl1)
                 max_fov = hfov
     print("Max: fov=%.1f #inl=%d axis=%s" % (max_fov, max_n_inliers, max_ns))
@@ -151,7 +162,7 @@ def detect_lines(img_bin, num_lines_target, n_iterations=5):
             vote_thresh /= change_rate
         else:
             break
-        change_rate = (change_rate + 1) / 2
+        change_rate = change_rate * 0.9 + 0.1
     assert(lines is not None)
     return lines[0]
 
@@ -182,7 +193,7 @@ def detect_board(photo_id, img, visualize):
     if visualize:
         cv2.imwrite('debug/%s-binary.png' % photo_id, img_bin)
     # Detect lines. None or [[(rho,theta)]]
-    lines = detect_lines(img_bin, 100)
+    lines = detect_lines(img_bin, 20, 10)
     lines_weak = detect_lines(img_bin, 1000)
     if visualize:
         img_gray_w_lines = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR) * 0
