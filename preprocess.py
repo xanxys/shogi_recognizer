@@ -146,7 +146,7 @@ def find_9segments(xs, valid_width_range):
     """
     min_dx, max_dx = valid_width_range
     ratio_thresh = 0.08
-    spl_xs = None
+    spl_xs = {}
     n_gp = 0
     xs.sort()
     for (x0, x1) in itertools.combinations(xs, 2):
@@ -154,7 +154,6 @@ def find_9segments(xs, valid_width_range):
         dx = abs(x1 - x0) / 9
         if not (min_dx <= dx <= max_dx):
             continue
-        n_gp += 1
         segs = {}
         for x in xs:
             t = (x - x0) / dx
@@ -164,15 +163,13 @@ def find_9segments(xs, valid_width_range):
                 segs.setdefault(key, []).append(x)
 
         if len(segs) == 10 and max(segs.keys()) - min(segs.keys()) + 1 == 10:
-            print('Seems ok')
-            print('Good Pairs(premature)', n_gp)
+            #print('Good Pairs(premature)', n_gp)
+            n_gp += 1
             spl_xs = segs
-            break
+            #break
     else:
         print('Good Pairs', n_gp)
-        return []
-
-    return map(lambda e: e[0], spl_xs.values())
+        return map(lambda e: e[0], spl_xs.values())
 
 
 def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
