@@ -1,5 +1,6 @@
 #!/bin/python
 from __future__ import print_function, division
+import argparse
 import numpy as np
 import math
 import scipy.linalg as la
@@ -8,6 +9,8 @@ import cv2
 import os
 import os.path
 import random
+import multiprocessing
+import traceback
 
 
 def rhotheta_to_cartesian(rho, theta):
@@ -207,21 +210,37 @@ def detect_board(photo_id, img, visualize):
     return True
 
 
-if __name__ == '__main__':
-    dir_path = './dataset/no-mochigoma-initial'
-    count = {
-        "loaded": 0,
-        "detected": 0
-    }
-    for (photo_id, p) in enumerate(os.listdir(dir_path)):
-        img_path = os.path.join(dir_path, p)
+def process_image(packed_args):
+    photo_id, img_path = packed_args
+    print(img_path)
+    try:
         img = cv2.imread(img_path)
         print('processing %s: id=%s shape=%s' % (img_path, photo_id, img.shape))
-        count["loaded"] += 1
         detected = detect_board(str(photo_id), img, True)
-        if detected:
-            count["detected"] += 1
-        else:
+        if not detected:
             print('->failed')
+    except:
+        traceback.print_exc()
 
-    print(count)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description="""
+Extract 9x9 cells from photos of shogi board.""",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        'dataset', metavar='DATASET', nargs=1, type=str,
+        help='Dataset directory path')
+    parser.add_argument(
+        '-j', nargs='?', metavar='NUM_PROC', type=int, default=1, const=True,
+        help='Number of parallel processes')
+
+    args = parser.parse_args()
+    assert(args.j >= 1)
+
+    dir_path = args.dataset[0]
+    pool = multiprocessing.Pool(args.j)
+    # HACK: receive keyboard interrupt correctly
+    # https://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
+    ls = [(photo_id, os.path.join(dir_path, p)) for (photo_id, p) in enumerate(os.listdir(dir_path))]
+    pool.map_async(process_image, ls).get(1000)
