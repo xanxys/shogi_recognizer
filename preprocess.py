@@ -52,6 +52,27 @@ def get_initial_configuration():
     return initial_state
 
 
+def get_rot_invariants_initial():
+    """
+    Return positions invariant to 90-degree rotation,
+    only considering empty vs occupied categories.
+
+    (always_empty, always_occupied)
+    """
+    initial_state = get_initial_configuration()
+    common_occupied = set()
+    common_empty = set()
+    for i in range(1, 10):
+        for j in range(1, 10):
+            p = (i, j)
+            pt = (j, i)
+            if p in initial_state and pt in initial_state:
+                common_occupied.add(p)
+            elif p not in initial_state and pt not in initial_state:
+                common_empty.add(p)
+    return (common_empty, common_occupied)
+
+
 def rhotheta_to_cartesian(rho, theta):
     """
     Return (org, dir)
@@ -368,6 +389,31 @@ def draw_rhotheta_line(img, line, color):
     p1 = tuple((l_org + l_dir * 2000).astype(int))
     cv2.line(img, p0, p1, color, lineType=cv.CV_AA)
 
+
+def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
+    """
+    xs, ys: ticks of grid
+    Extract 9^2 square patches from ortho_image.
+    """
+    assert(len(xs) == 10)
+    assert(len(ys) == 10)
+    patches = {}
+    for (ix, (x0, x1)) in enumerate(zip(xs, xs[1:])):
+        dx = x1 - x0
+        x0 = int(x0 - dx * margin)
+        x1 = int(x1 + dx * margin)
+        for (iy, (y0, y1)) in enumerate(zip(ys, ys[1:])):
+            dy = y1 - y0
+            y0 = int(y0 - dy * margin)
+            y1 = int(y1 + dy * margin)
+
+            raw_patch_image = ortho_image[y0:y1, x0:x1]
+            patches[(ix + 1, iy + 1)] = {
+                "image": cv2.resize(raw_patch_image, (patch_size, patch_size))
+            }
+    return patches
+
+
 def detect_board(photo_id, img, visualize):
     """
     * photo_id: str
@@ -408,44 +454,38 @@ def detect_board(photo_id, img, visualize):
 
     # Extract patches
     depersp_img, xs, ys = pat
-    margin = 0.1
-    patches = {}
-    patch_size = 80
-    for (ix, (x0, x1)) in enumerate(zip(xs, xs[1:])):
-        dx = x1 - x0
-        x0 = int(x0 - dx * margin)
-        x1 = int(x1 + dx * margin)
-        for (iy, (y0, y1)) in enumerate(zip(ys, ys[1:])):
-            dy = y1 - y0
-            y0 = int(y0 - dy * margin)
-            y1 = int(y1 + dy * margin)
-
-            patches[(ix + 1, iy + 1)] = {
-                "image": cv2.resize(depersp_img[y0:y1, x0:x1], (patch_size, patch_size))
-            }
+    patches = extract_patches(depersp_img, xs, ys)
     if visualize:
         for (pos, patch) in patches.items():
             cv2.imwrite(
                 "debug/patch-%s-%d%d.png" % (photo_id, pos[0], pos[1]),
                 patch["image"])
 
-    # Calculate rotation-invariant locations
-    initial_state = get_initial_configuration()
-    common_occupied = set()
-    common_empty = set()
-    for i in range(1, 10):
-        for j in range(1, 10):
-            p = (i, j)
-            pt = (j, i)
-            if p in initial_state and pt in initial_state:
-                common_occupied.add(p)
-            elif p not in initial_state and pt not in initial_state:
-                common_empty.add(p)
-    print('Rot-invariant empty=%s occupied=%s' % (common_empty, common_occupied))
+    vertical = is_vertical(patches)
+    print('%s: vertical=%s' % (photo_id, vertical))
+
+    derive_empty_vs_nonempty_samples(photo_id, patches)
+
+    return True
+
+
+def is_vertical(patches):
+    """
+    Given 9^2 patches in intial configuration, decide rotation
+    of the board.
+
+    vertical: principle moving direction is up-down
+    horizontal: principle moving direction is left-right
+
+    return is_vertical
+    """
+    param_path = "params/cell_emptiness_20x20.json.bz2"
 
     # Guess rotation by using empty vs. occupied information.
-    classifier_e = classify.CellEmptinessClassifier("params/cell_emptiness_20x20.json.bz2")
-    non_informative = common_occupied | common_empty
+    initial_state = get_initial_configuration()
+    always_empty, always_occupied = get_rot_invariants_initial()
+    classifier_e = classify.CellEmptinessClassifier(param_path)
+    non_informative = always_empty | always_occupied
     vote_vertical = 0
     vote_horizontal = 0
     for (pos, patch) in patches.items():
@@ -458,22 +498,30 @@ def detect_board(photo_id, img, visualize):
         else:
             vote_horizontal += 1
     vertical = vote_vertical > vote_horizontal
-    print('%s: vertical=%s' % (photo_id, vertical))
+    return vertical
 
+
+def derive_empty_vs_nonempty_samples(photo_id, patches):
+    """
+    Write empty vs. occupied cell images from patches in
+    initial configuration.
+
+    Tolerant to 90-degree rotation.
+    """
+    pid_blacklist = set(["vy", "z", "b", "9", "2", "1"])
+    if photo_id in pid_blacklist:
+        return
 
     # Generate empty vs. non-emtpy samples
-    pid_blacklist = set(["vy", "z", "b", "9", "2", "1"])
-    if photo_id not in pid_blacklist:
-        for pos in common_empty:
-            cv2.imwrite(
-                'derived/cell-empty/%s-%d%d.png' % (photo_id, pos[0], pos[1]),
-                patches[pos]["image"])
-        for pos in common_occupied:
-            cv2.imwrite(
-                'derived/cell-occupied/%s-%d%d.png' % (photo_id, pos[0], pos[1]),
-                patches[pos]["image"])
-
-    return True
+    always_empty, always_occupied = get_rot_invariants_initial()
+    for pos in always_empty:
+        cv2.imwrite(
+            'derived/cell-empty/%s-%d%d.png' % (photo_id, pos[0], pos[1]),
+            patches[pos]["image"])
+    for pos in always_occupied:
+        cv2.imwrite(
+            'derived/cell-occupied/%s-%d%d.png' % (photo_id, pos[0], pos[1]),
+            patches[pos]["image"])
 
 
 def process_image(packed_args):
