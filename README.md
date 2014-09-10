@@ -25,6 +25,12 @@ Programs
 * `train.py`: Train cell image classifier
 
 
+Useful Techniques
+----------
+### Manually selecting good data generated from unstable detector
+`./preprocess.py --debug` forces fixed seed, with that, you can update `--blacklist` to reject bad data after inspecting data.
+
+
 References
 ----------
 * [J. C. Bazin, et al.: 3-line RANSAC for Orthogonal Vanishing Point Detection, IROS, 2012](http://graphics.ethz.ch/~jebazin/papers/IROS_2012.pdf)

@@ -539,10 +539,6 @@ def derive_typed_samples(photo_id, patches):
     """
     Depends on: {empty, occupied} classifier
     """
-    pid_blacklist = set(["vy", "z", "b", "9", "2", "1", "k", "m", "n", "t"])
-    if photo_id in pid_blacklist:
-        return
-
     vertical = is_vertical(patches)
     if not vertical:
         patches = rotate_patches_90deg(patches)
@@ -568,10 +564,6 @@ def derive_empty_vs_nonempty_samples(photo_id, patches):
 
     Tolerant to 90-degree rotation.
     """
-    pid_blacklist = set(["vy", "z", "b", "9", "2", "1"])
-    if photo_id in pid_blacklist:
-        return
-
     # Generate empty vs. non-emtpy samples
     always_empty, always_occupied = get_rot_invariants_initial()
     for pos in always_empty:
@@ -587,6 +579,10 @@ def derive_empty_vs_nonempty_samples(photo_id, patches):
 def process_image(packed_args):
     photo_id, img_path, debug, derive = packed_args
     print(img_path)
+    if debug:
+        print('WARN: using fixed seed 0 for debugging')
+        random.seed(0)
+
     try:
         img = cv2.imread(img_path)
         print('processing %s: id=%s shape=%s' % (img_path, photo_id, img.shape))
@@ -624,16 +620,26 @@ Extract 9x9 cells from photos of shogi board.""",
         help='Derive training data')
     parser.add_argument(
         '--debug', action='store_true',
-        help='Dump debug images to ./debug/')
+        help='Dump debug images to ./debug/. Also fix random.seed.')
+    parser.add_argument(
+        '--blacklist', nargs='+', type=str, default=[],
+        help="Don't process specified photo id")
 
     args = parser.parse_args()
     assert(args.j >= 1)
 
+    pid_blacklist = set(args.blacklist)
+
     dir_path = args.dataset[0]
     pool = multiprocessing.Pool(args.j)
+    ls = []
+    for p in os.listdir(dir_path):
+        pid = os.path.splitext(p)[0]
+        if pid in pid_blacklist:
+            continue
+        ls.append((pid, os.path.join(dir_path, p), args.debug, args.derive))
     # HACK: receive keyboard interrupt correctly
     # https://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-    ls = [(os.path.splitext(p)[0], os.path.join(dir_path, p), args.debug, args.derive) for p in os.listdir(dir_path)]
     results = pool.map_async(process_image, ls).get(1000)
 
     count = {}
