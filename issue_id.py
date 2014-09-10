@@ -19,6 +19,9 @@ File extensions will be lowercased.""",
     parser.add_argument(
         'existing', metavar='DATASET_EXISTING', nargs=1, type=str,
         help='Existing dataset directory path')
+    parser.add_argument(
+        '--iamsure', action='store_true',
+        help='Do write images')
 
     args = parser.parse_args()
     if args.new == args.existing:
@@ -46,4 +49,5 @@ File extensions will be lowercased.""",
         path_src = os.path.join(args.new[0], path)
         path_dst = os.path.join(args.existing[0], entry_id + os.path.splitext(path)[1].lower())
         print('Copying from %s to %s' % (path_src, path_dst))
-        shutil.copyfile(path_src, path_dst)
+        if args.iamsure:
+            shutil.copyfile(path_src, path_dst)
