@@ -414,7 +414,7 @@ def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
     return patches
 
 
-def detect_board(photo_id, img, visualize):
+def detect_board(photo_id, img, visualize, derive):
     """
     * photo_id: str
     * img: BGR image
@@ -461,8 +461,9 @@ def detect_board(photo_id, img, visualize):
                 "debug/patch-%s-%d%d.png" % (photo_id, pos[0], pos[1]),
                 patch["image"])
 
-    derive_typed_samples(photo_id, patches)
-    derive_empty_vs_nonempty_samples(photo_id, patches)
+    if derive:
+        derive_typed_samples(photo_id, patches)
+        derive_empty_vs_nonempty_samples(photo_id, patches)
 
     return True
 
@@ -583,12 +584,12 @@ def derive_empty_vs_nonempty_samples(photo_id, patches):
 
 
 def process_image(packed_args):
-    photo_id, img_path = packed_args
+    photo_id, img_path, derive = packed_args
     print(img_path)
     try:
         img = cv2.imread(img_path)
         print('processing %s: id=%s shape=%s' % (img_path, photo_id, img.shape))
-        detected = detect_board(str(photo_id), img, True)
+        detected = detect_board(str(photo_id), img, True, derive)
         if not detected:
             return {
                 "loaded": 1
@@ -617,6 +618,9 @@ Extract 9x9 cells from photos of shogi board.""",
     parser.add_argument(
         '-j', nargs='?', metavar='NUM_PROC', type=int, default=1, const=True,
         help='Number of parallel processes')
+    parser.add_argument(
+        '--derive', action='store_true',
+        help='Derive training data')
 
     args = parser.parse_args()
     assert(args.j >= 1)
@@ -625,7 +629,7 @@ Extract 9x9 cells from photos of shogi board.""",
     pool = multiprocessing.Pool(args.j)
     # HACK: receive keyboard interrupt correctly
     # https://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
-    ls = [(os.path.splitext(p)[0], os.path.join(dir_path, p)) for p in os.listdir(dir_path)]
+    ls = [(os.path.splitext(p)[0], os.path.join(dir_path, p), args.derive) for p in os.listdir(dir_path)]
     results = pool.map_async(process_image, ls).get(1000)
 
     count = {}
