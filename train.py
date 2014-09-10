@@ -282,6 +282,12 @@ def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=10):
             x: train_set_x[index * batch_size:(index + 1) * batch_size],
             y: train_set_y[index * batch_size:(index + 1) * batch_size]})
 
+    predict_model = theano.function(
+        inputs=[],
+        outputs=classifier.y_pred,
+        givens={
+            x: test_set_x})
+
     ###############
     # TRAIN MODEL #
     ###############
@@ -346,6 +352,7 @@ def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=10):
                 done_looping = True
                 break
 
+
     end_time = time.clock()
     print(('Optimization complete with best validation score of %f %%,'
            'with test performance %f %%') %
@@ -353,6 +360,18 @@ def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=10):
     print('The code run for %d epochs, with %f epochs/sec' % (
         epoch, 1. * epoch / (end_time - start_time)))
     print('The code ran for %.1fs' % ((end_time - start_time)))
+
+    print('Showing test set results')
+    ys_pred = predict_model()
+    n_all = 0
+    n_fail = 0
+    for (i, (tx, y, y_pred)) in enumerate(zip(test_set_x.eval(), test_set_y.eval(), ys_pred)):
+        result = 'success' if y == y_pred else 'fail'
+        cv2.imwrite('debug/classify-%s-%d.png' % (result, i), tx.reshape([20, 20]) * 255)
+        if y != y_pred:
+            n_fail += 1
+        n_all += 1
+    print('Failure rate: %f' % (n_fail / n_all))
 
 
 if __name__ == '__main__':
