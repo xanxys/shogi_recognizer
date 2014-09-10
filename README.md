@@ -13,8 +13,8 @@ annotation (mostly rejection of failed samples) here and there.
 1. Prepare photos with boards in the initial configuration `D0`
 2. Extract piece patches from `D0` using (non-ML) image processing pipeline
 3. Collect empty vs. non-empty labels using rotation-invariance, and train classifier `C0`
-4. Use `C0` to `D0` and guess rotation (<- we're here)
-5. With rotations, we get labels for empty and non-promoted piece types, train classifier `C1` (also re-train `C0` -> `C0'`)
+4. Use `C0` to `D0` and guess rotation
+5. With rotations, we get labels for empty and non-promoted piece types (<- we're here), train classifier `C1` (also re-train `C0` -> `C0'`)
 6. ???
 
 

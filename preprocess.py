@@ -18,7 +18,7 @@ import classify
 def get_initial_configuration():
     """
     Return (pos, type)
-    pos: (1, 0) - (9, 9)
+    pos: (1, 1) - (9, 9)
     type will be 2-letter strings like CSA format.
     (e.g. "FU", "HI", etc.)
     """
@@ -392,7 +392,7 @@ def draw_rhotheta_line(img, line, color):
 
 def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
     """
-    xs, ys: ticks of grid
+    xs, ys: ticks of grid (in increasing order)
     Extract 9^2 square patches from ortho_image.
     """
     assert(len(xs) == 10)
@@ -408,7 +408,7 @@ def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
             y1 = int(y1 + dy * margin)
 
             raw_patch_image = ortho_image[y0:y1, x0:x1]
-            patches[(ix + 1, iy + 1)] = {
+            patches[(10 - (ix + 1), iy + 1)] = {
                 "image": cv2.resize(raw_patch_image, (patch_size, patch_size))
             }
     return patches
@@ -461,12 +461,43 @@ def detect_board(photo_id, img, visualize):
                 "debug/patch-%s-%d%d.png" % (photo_id, pos[0], pos[1]),
                 patch["image"])
 
-    vertical = is_vertical(patches)
-    print('%s: vertical=%s' % (photo_id, vertical))
-
+    derive_typed_samples(photo_id, patches)
     derive_empty_vs_nonempty_samples(photo_id, patches)
 
     return True
+
+
+def rotate_patches_90deg(patches):
+    """
+    Rotate patch dictionary as if original image is rotated by 90-degree
+    CCW.
+    """
+    def rot_pos(i, j):
+        """
+        Board Coordinates:
+              i
+        9 ... 1
+         ------  1 j
+         |    | ...
+         ------  9
+        """
+        return (10 - j, i)
+
+    def rot_patch(patch):
+        """
+        Image coordinates:
+         |---->x
+         |
+        \|/ y
+        """
+        return {
+            "image": patch["image"].transpose([1, 0, 2])[::-1]
+        }
+
+    return {
+        rot_pos(*pos): rot_patch(patch)
+        for (pos, patch) in patches.items()
+    }
 
 
 def is_vertical(patches):
@@ -499,6 +530,38 @@ def is_vertical(patches):
             vote_horizontal += 1
     vertical = vote_vertical > vote_horizontal
     return vertical
+
+
+def derive_typed_samples(photo_id, patches):
+    """
+    Depends on: {empty, occupied} classifier
+    """
+    pid_blacklist = set(["vy", "z", "b", "9", "2", "1", "k", "m", "n", "t"])
+    if photo_id in pid_blacklist:
+        return
+
+    vertical = is_vertical(patches)
+    if not vertical:
+        patches = rotate_patches_90deg(patches)
+
+    initial_conf = get_initial_configuration()
+    for (pos, patch) in patches.items():
+        metadata = {
+            "photo_id": photo_id,
+            "pos": pos,
+        }
+        if pos in initial_conf:
+            metadata["empty"] = False
+            metadata["type"] = initial_conf[pos]
+            metadata["direction"] = "down" if pos[1] <= 3 else "up"
+        else:
+            metadata["empty"] = True
+
+        name = '%s-%d%d-%s-%s' % (
+            photo_id, pos[0], pos[1],
+            metadata.get("type", "emtpy"),
+            metadata.get("direction", "any"))
+        cv2.imwrite('derived/cells/%s.png' % name, patch["image"])
 
 
 def derive_empty_vs_nonempty_samples(photo_id, patches):
