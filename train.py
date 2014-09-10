@@ -120,14 +120,25 @@ def preprocess_cell_image(img):
     return cv2.resize(img_gray, (20, 20), cv.CV_INTER_AREA).reshape([400]) / 255
 
 
-def load_all_samples_in(dir_path):
+def load_all_samples_in(dir_path, var_rotate=False):
     """
     Return [N, 400] vector (N: number of samples)
     """
     samples = []
     for path in os.listdir(dir_path):
         img_cell = cv2.imread(os.path.join(dir_path, path))
-        samples.append(preprocess_cell_image(img_cell))
+        # Create variants.
+        imgs = []
+        if var_rotate:
+            imgs = [
+                img_cell,
+                img_cell[::-1, ::-1],
+                img_cell.transpose([1, 0, 2])[::-1],
+                img_cell.transpose([1, 0, 2])[:, ::-1]]
+        else:
+            imgs = [img_cell]
+        for img in imgs:
+            samples.append(preprocess_cell_image(img))
     return np.array(samples)
 
 
@@ -139,7 +150,7 @@ def load_data():
     samples = []
     labels = []
     for (category, name) in [(0, "occupied"), (1, "empty")]:
-        samples_cat = load_all_samples_in('derived/cell-%s' % name)
+        samples_cat = load_all_samples_in('derived/cell-%s' % name, var_rotate=True)
         cv2.imwrite('debug/%s.png' % name, samples_cat * 255)
         labels_cat = np.ones([len(samples_cat)]) * category
         samples.append(samples_cat)
@@ -197,7 +208,7 @@ def load_data():
     ]
 
 
-def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=10):
+def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=100):
     """
     Demonstrate stochastic gradient descent optimization of a log-linear
     model
