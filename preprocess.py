@@ -515,7 +515,8 @@ def is_vertical(patches):
     # Guess rotation by using empty vs. occupied information.
     initial_state = get_initial_configuration()
     always_empty, always_occupied = get_rot_invariants_initial()
-    classifier_e = classify.CellEmptinessClassifier(param_path)
+    classifier_e = classify.CellEmptinessClassifier()
+    classifier_e.load_parameters(param_path)
     non_informative = always_empty | always_occupied
     vote_vertical = 0
     vote_horizontal = 0

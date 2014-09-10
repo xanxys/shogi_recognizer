@@ -15,15 +15,25 @@ import bz2
 
 
 class CellEmptinessClassifier(object):
-    def __init__(self, path):
+    def __init__(self):
         x = T.matrix('x')
+        self.x = x
 
         self.regression = LogisticRegression(input=x, n_in=400, n_out=2)
-        self.regression.load_parameters(path)
+        self.negative_log_likelihood = self.regression.negative_log_likelihood
+        self.errors = self.regression.errors
+        self.W = self.regression.W
+        self.b = self.regression.b
 
         self.classify_model = theano.function(
             inputs=[x],
             outputs=[self.regression.y_pred, self.regression.p_y_given_x])
+
+    def dump_parameters(self, path):
+        self.regression.dump_parameters(path)
+
+    def load_parameters(self, path):
+        self.regression.load_parameters(path)
 
     def classify(self, img):
         """
@@ -51,19 +61,26 @@ class CellTypeClassifierUp(object):
             "OU"
         ]
         x = T.matrix('x')
+        self.x = x
 
         self.regression = LogisticRegression(input=x, n_in=400, n_out=len(self.labels))
         self.classify_model = theano.function(
             inputs=[x],
             outputs=[self.regression.y_pred, self.regression.p_y_given_x])
 
+        self.negative_log_likelihood = self.regression.negative_log_likelihood
+        self.errors = self.regression.errors
+        self.W = self.regression.W
+        self.b = self.regression.b
+
     def load_parameter(self, path):
         self.regression.load_parameters(path)
 
+    def dump_parameters(self, path):
+        self.regression.dump_parameters(path)
+
     def get_label_to_category(self):
-        d = {label: cat for (cat, label) in enumerate(self.labels)}
-        print(d)
-        return d
+        return {label: cat for (cat, label) in enumerate(self.labels)}
 
     def get_category_to_label(self):
         return dict(enumerate(self.labels))
@@ -451,6 +468,7 @@ def load_up_dataset(classifier):
     samples = []
     categories = []
     table = classifier.get_label_to_category()
+    print(table)
     dir_path = 'derived/cells'
     for path in os.listdir(dir_path):
         photo_id, org_pos, ptype = os.path.splitext(path)[0].split('-')
@@ -510,21 +528,19 @@ def load_up_dataset(classifier):
     ]
 
 
-def command_train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, batch_size=100):
+def train_sgd(datasets, model, learning_rate=0.13, n_epochs=1000, batch_size=100):
     """
-    Train logistic regression classifier {emtpy, occupied} with
-    stochastic gradient descent.
+    Use stochastic gradient descent to train model.
+    model must expose following theano function/variables:
+    * x
+    * negative_log_likelihood
+    * errors
+    * W
+    * b
 
-    :type learning_rate: float
-    :param learning_rate: learning rate used (factor for the stochastic
-                          gradient)
-
-    :type n_epochs: int
-    :param n_epochs: maximal number of epochs to run the optimizer
+    datasets: (train_set, valid_set, test_set)
     """
-    datasets = load_data()
-    n_categories = 15
-
+    assert(len(datasets) == 3)
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1]
     test_set_x, test_set_y = datasets[2]
@@ -534,49 +550,40 @@ def command_train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, 
     n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size
     n_test_batches = test_set_x.get_value(borrow=True).shape[0] // batch_size
 
-    ######################
-    # BUILD ACTUAL MODEL #
-    ######################
-    print('... building the model')
-
-    # allocate symbolic variables for the data
+   # allocate symbolic variables for the data
     index = T.lscalar()  # index to a [mini]batch
-    x = T.matrix('x')  # the data is presented as rasterized images
+    x = model.x
     y = T.ivector('y')  # the labels are presented as 1D vector of
                            # [int] labels
 
-    # construct the logistic regression class
-    # Each MNIST image has size 28*28
-    classifier = LogisticRegression(input=x, n_in=400, n_out=n_categories)
-
     # the cost we minimize during training is the negative log likelihood of
     # the model in symbolic format
-    cost = classifier.negative_log_likelihood(y)
+    cost = model.negative_log_likelihood(y)
 
     # compiling a Theano function that computes the mistakes that are made by
     # the model on a minibatch
     test_model = theano.function(
         inputs=[index],
-        outputs=classifier.errors(y),
+        outputs=model.errors(y),
         givens={
             x: test_set_x[index * batch_size: (index + 1) * batch_size],
             y: test_set_y[index * batch_size: (index + 1) * batch_size]})
 
     validate_model = theano.function(
         inputs=[index],
-        outputs=classifier.errors(y),
+        outputs=model.errors(y),
         givens={
             x: valid_set_x[index * batch_size:(index + 1) * batch_size],
             y: valid_set_y[index * batch_size:(index + 1) * batch_size]})
 
     # compute the gradient of cost with respect to theta = (W,b)
-    g_W = T.grad(cost=cost, wrt=classifier.W)
-    g_b = T.grad(cost=cost, wrt=classifier.b)
+    g_W = T.grad(cost=cost, wrt=model.W)
+    g_b = T.grad(cost=cost, wrt=model.b)
 
     # specify how to update the parameters of the model as a list of
     # (variable, update expression) pairs.
-    updates = [(classifier.W, classifier.W - learning_rate * g_W),
-               (classifier.b, classifier.b - learning_rate * g_b)]
+    updates = [(model.W, model.W - learning_rate * g_W),
+               (model.b, model.b - learning_rate * g_b)]
 
     # compiling a Theano function `train_model` that returns the cost, but in
     # the same time updates the parameter of the model based on the rules
@@ -589,11 +596,6 @@ def command_train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, 
             x: train_set_x[index * batch_size:(index + 1) * batch_size],
             y: train_set_y[index * batch_size:(index + 1) * batch_size]})
 
-    predict_model = theano.function(
-        inputs=[],
-        outputs=classifier.y_pred,
-        givens={
-            x: test_set_x})
 
     ###############
     # TRAIN MODEL #
@@ -661,9 +663,35 @@ def command_train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, 
     end_time = time.clock()
     print('validation(best): %f %% / test: %f %%' %
          (best_validation_loss * 100, test_score * 100))
-    print('The code run for %d epochs, with %f epochs/sec' %
+    print('The training run for %d epochs, with %f epochs/sec' %
         (epoch, epoch / (end_time - start_time)))
-    print('The code ran for %.1fs' % (end_time - start_time))
+    print('The training ran for %.1fs' % (end_time - start_time))
+
+
+
+def command_train_cell_classifier(dump_path):
+    """
+    Train logistic regression classifier {emtpy, occupied} with
+    stochastic gradient descent.
+
+    :type learning_rate: float
+    :param learning_rate: learning rate used (factor for the stochastic
+                          gradient)
+
+    :type n_epochs: int
+    :param n_epochs: maximal number of epochs to run the optimizer
+    """
+    ct_classifier = CellEmptinessClassifier()
+    datasets = load_data()
+
+    train_sgd(datasets, ct_classifier)
+
+    test_set_x, test_set_y = datasets[2]
+    predict_model = theano.function(
+        inputs=[],
+        outputs=ct_classifier.regression.y_pred,
+        givens={
+            ct_classifier.x: test_set_x})
 
     print('Showing test set results')
     ys_pred = predict_model()
@@ -678,7 +706,7 @@ def command_train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, 
     print('Failure rate: %f' % (n_fail / n_all))
 
     print('Writing classifier parameters to %s' % dump_path)
-    classifier.dump_parameters(dump_path)
+    ct_classifier.dump_parameters(dump_path)
 
 
 def command_train_types_up_classifier(param_path, learning_rate=0.13, n_epochs=1000, batch_size=100):
@@ -686,145 +714,15 @@ def command_train_types_up_classifier(param_path, learning_rate=0.13, n_epochs=1
     ct_classifier = CellTypeClassifierUp()
     datasets = load_up_dataset(ct_classifier)
 
-    train_set_x, train_set_y = datasets[0]
-    valid_set_x, valid_set_y = datasets[1]
+    train_sgd(datasets, ct_classifier)
+
     test_set_x, test_set_y = datasets[2]
-
-    # compute number of minibatches for training, validation and testing
-    n_train_batches = train_set_x.get_value(borrow=True).shape[0] // batch_size
-    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size
-    n_test_batches = test_set_x.get_value(borrow=True).shape[0] // batch_size
-
-    ######################
-    # BUILD ACTUAL MODEL #
-    ######################
-    print('... building the model')
-
-    # allocate symbolic variables for the data
-    index = T.lscalar()  # index to a [mini]batch
-    x = T.matrix('x')  # the data is presented as rasterized images
-    y = T.ivector('y')  # the labels are presented as 1D vector of
-                           # [int] labels
-
-    # construct the logistic regression class
-    # Each MNIST image has size 28*28
-    classifier = LogisticRegression(input=x, n_in=400, n_out=15)
-
-    # the cost we minimize during training is the negative log likelihood of
-    # the model in symbolic format
-    cost = classifier.negative_log_likelihood(y)
-
-    # compiling a Theano function that computes the mistakes that are made by
-    # the model on a minibatch
-    test_model = theano.function(
-        inputs=[index],
-        outputs=classifier.errors(y),
-        givens={
-            x: test_set_x[index * batch_size: (index + 1) * batch_size],
-            y: test_set_y[index * batch_size: (index + 1) * batch_size]})
-
-    validate_model = theano.function(
-        inputs=[index],
-        outputs=classifier.errors(y),
-        givens={
-            x: valid_set_x[index * batch_size:(index + 1) * batch_size],
-            y: valid_set_y[index * batch_size:(index + 1) * batch_size]})
-
-    # compute the gradient of cost with respect to theta = (W,b)
-    g_W = T.grad(cost=cost, wrt=classifier.W)
-    g_b = T.grad(cost=cost, wrt=classifier.b)
-
-    # specify how to update the parameters of the model as a list of
-    # (variable, update expression) pairs.
-    updates = [(classifier.W, classifier.W - learning_rate * g_W),
-               (classifier.b, classifier.b - learning_rate * g_b)]
-
-    # compiling a Theano function `train_model` that returns the cost, but in
-    # the same time updates the parameter of the model based on the rules
-    # defined in `updates`
-    train_model = theano.function(
-        inputs=[index],
-        outputs=cost,
-        updates=updates,
-        givens={
-            x: train_set_x[index * batch_size:(index + 1) * batch_size],
-            y: train_set_y[index * batch_size:(index + 1) * batch_size]})
-
     predict_model = theano.function(
         inputs=[],
-        outputs=classifier.y_pred,
+        outputs=ct_classifier.regression.y_pred,
         givens={
-            x: test_set_x})
+            ct_classifier.x: test_set_x})
 
-    ###############
-    # TRAIN MODEL #
-    ###############
-    print('... training the model')
-    # early-stopping parameters
-    patience = 5000  # look as this many examples regardless
-    patience_increase = 2  # wait this much longer when a new best is found
-    improvement_threshold = 0.995  # a relative improvement of this much is
-                                  # considered significant
-    validation_frequency = min(n_train_batches, patience / 2)
-                                  # go through this many
-                                  # minibatche before checking the network
-                                  # on the validation set; in this case we
-                                  # check every epoch
-
-    best_params = None
-    best_validation_loss = np.inf
-    test_score = 0.
-    start_time = time.clock()
-
-    done_looping = False
-    epoch = 0
-    while (epoch < n_epochs) and (not done_looping):
-        epoch = epoch + 1
-        for minibatch_index in xrange(n_train_batches):
-
-            minibatch_avg_cost = train_model(minibatch_index)
-            # iteration number
-            iter = (epoch - 1) * n_train_batches + minibatch_index
-
-            if (iter + 1) % validation_frequency == 0:
-                # compute zero-one loss on validation set
-                validation_losses = [validate_model(i)
-                                     for i in xrange(n_valid_batches)]
-                this_validation_loss = np.mean(validation_losses)
-
-                print('epoch %i, minibatch %i/%i, validation error %f %%' % \
-                    (epoch, minibatch_index + 1, n_train_batches,
-                    this_validation_loss * 100.))
-
-                # if we got the best validation score until now
-                if this_validation_loss < best_validation_loss:
-                    #improve patience if loss improvement is good enough
-                    if this_validation_loss < best_validation_loss *  \
-                       improvement_threshold:
-                        patience = max(patience, iter * patience_increase)
-
-                    best_validation_loss = this_validation_loss
-                    # test it on the test set
-
-                    test_losses = [test_model(i)
-                                   for i in xrange(n_test_batches)]
-                    test_score = np.mean(test_losses)
-
-                    print(('     epoch %i, minibatch %i/%i, test error of best'
-                       ' model %f %%') %
-                        (epoch, minibatch_index + 1, n_train_batches,
-                         test_score * 100.))
-
-            if patience <= iter:
-                done_looping = True
-                break
-
-    end_time = time.clock()
-    print('validation(best): %f %% / test: %f %%' %
-         (best_validation_loss * 100, test_score * 100))
-    print('The code run for %d epochs, with %f epochs/sec' %
-        (epoch, epoch / (end_time - start_time)))
-    print('The code ran for %.1fs' % (end_time - start_time))
 
     print('Showing test set results')
     ys_pred = predict_model()
@@ -840,12 +738,12 @@ def command_train_types_up_classifier(param_path, learning_rate=0.13, n_epochs=1
     print('Failure rate: %f' % (n_fail / n_all))
 
     print('Writing classifier parameters to %s' % param_path)
-    classifier.dump_parameters(param_path)
-
+    ct_classifier.dump_parameters(param_path)
 
 
 def command_classify_images(param_path, img_paths):
-    classifier = CellEmptinessClassifier(param_path)
+    classifier = CellEmptinessClassifier()
+    classifier.load_parameters(param_path)
     for img_path in img_paths:
         img = cv2.imread(img_path)
         label, prob = classifier.classify(img)
