@@ -73,7 +73,7 @@ class CellTypeClassifierUp(object):
         self.W = self.regression.W
         self.b = self.regression.b
 
-    def load_parameter(self, path):
+    def load_parameters(self, path):
         self.regression.load_parameters(path)
 
     def dump_parameters(self, path):
@@ -89,14 +89,10 @@ class CellTypeClassifierUp(object):
         """
         Return (label, prob)
         """
-        labels = {
-            0: "occupied",
-            1: "empty"
-        }
         vec = preprocess_cell_image(img)
         categories, probs = self.classify_model(vec.reshape([1, 400]))
         category = categories[0]
-        return (labels[category], probs[0][category])
+        return (self.get_category_to_label()[category], probs[0][category])
 
 
 class HiddenLayer(object):
@@ -289,7 +285,6 @@ class LogisticRegression(object):
         params_b = self.b.eval()
         blob = {
             "comment": "logistic regression, 20x20 image",
-            "categories": ["occupied", "empty"],
             "W": map(list, params_w),
             "b": list(params_b)
         }
@@ -301,12 +296,8 @@ class LogisticRegression(object):
         Load model parameters written by dump_parameters.
         """
         blob = json.load(bz2.BZ2File(path, 'r'))
-        wp = np.array(blob["W"])
-        bp = np.array(blob["b"])
-        if wp.shape != (400, 2) or bp.shape != (2,):
-            raise RuntimeError("Imcompatible parameter shape")
-        self.W.set_value(wp)
-        self.b.set_value(bp)
+        self.W.set_value(np.array(blob["W"]))
+        self.b.set_value(np.array(blob["b"]))
 
     def negative_log_likelihood(self, y):
         """Return the mean of the negative log-likelihood of the prediction
@@ -750,6 +741,15 @@ def command_classify_images(param_path, img_paths):
         print('%s: %s with p=%f' % (img_path, label, prob))
 
 
+def command_classify_images_up(param_path, img_paths):
+    classifier = CellTypeClassifierUp()
+    classifier.load_parameters(param_path)
+    for img_path in img_paths:
+        img = cv2.imread(img_path)
+        label, prob = classifier.classify(img)
+        print('%s: %s with p=%f' % (img_path, label, prob))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="""
@@ -765,9 +765,13 @@ Train classifier.""",
         help='Parameter .json.bz2 input path')
 
     parser.add_argument(
-        '--classify', nargs='+', metavar='IMG_PATH', type=str,
+        '--classify-emptiness', nargs='+', metavar='IMG_PATH', type=str,
         default=None,
         help='Classify cell images')
+    parser.add_argument(
+        '--classify-types-up', nargs='+', metavar='IMG_PATH', type=str,
+        default=None,
+        help='Classify upright image types.')
 
     parser.add_argument(
         '--train-emptiness', action='store_true',
@@ -778,11 +782,14 @@ Train classifier.""",
 
     args = parser.parse_args()
 
-    if args.classify is not None:
+    if args.classify_emptiness is not None:
         if args.input is None:
             raise RuntimeError("Specify --input to classify")
-
-        command_classify_images(args.input, args.classify)
+        command_classify_images(args.input, args.classify_emptiness)
+    elif args.classify_types_up is not None:
+        if args.input is None:
+            raise RuntimeError("Specify --input to classify")
+        command_classify_images_up(args.input, args.classify_types_up)
     elif args.train_types_up:
         command_train_types_up_classifier(args.output)
     elif args.train_emptiness:
