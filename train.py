@@ -116,8 +116,9 @@ def preprocess_cell_image(img):
     because number of samples are low.
     """
     assert(img.shape == (80, 80, 3))
-    img_gray = cv2.cvtColor(img, cv.CV_BGR2GRAY)
-    return cv2.resize(img_gray, (20, 20), cv.CV_INTER_AREA).reshape([400]) / 255
+    img_small = cv2.resize(
+        cv2.cvtColor(img, cv.CV_BGR2GRAY), (20, 20), cv.CV_INTER_AREA)
+    return img_small.reshape([400]) / 255
 
 
 def load_all_samples_in(dir_path, var_rotate=False):
@@ -150,7 +151,8 @@ def load_data():
     samples = []
     labels = []
     for (category, name) in [(0, "occupied"), (1, "empty")]:
-        samples_cat = load_all_samples_in('derived/cell-%s' % name, var_rotate=True)
+        dataset_path = 'derived/cell-%s' % name
+        samples_cat = load_all_samples_in(dataset_path, var_rotate=True)
         cv2.imwrite('debug/%s.png' % name, samples_cat * 255)
         labels_cat = np.ones([len(samples_cat)]) * category
         samples.append(samples_cat)
@@ -175,7 +177,6 @@ def load_data():
 
     print('Dataset size: all=%d : train=%d validate=%d test=%d' % (
         n, len(x_train), len(x_validate), len(x_test)))
-
 
     def shared_dataset(data_x, data_y, borrow=True):
         """ Function that loads the dataset into shared variables
@@ -208,12 +209,10 @@ def load_data():
     ]
 
 
-def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=100):
+def train_cell_classifier(learning_rate=0.13, n_epochs=1000, batch_size=100):
     """
-    Demonstrate stochastic gradient descent optimization of a log-linear
-    model
-
-    This is demonstrated on MNIST.
+    Train logistic regression classifier {emtpy, occupied} with
+    stochastic gradient descent.
 
     :type learning_rate: float
     :param learning_rate: learning rate used (factor for the stochastic
@@ -221,11 +220,6 @@ def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=100):
 
     :type n_epochs: int
     :param n_epochs: maximal number of epochs to run the optimizer
-
-    :type dataset: string
-    :param dataset: the path of the MNIST dataset file from
-                 http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz
-
     """
     datasets = load_data()
 
@@ -363,14 +357,12 @@ def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=100):
                 done_looping = True
                 break
 
-
     end_time = time.clock()
-    print(('Optimization complete with best validation score of %f %%,'
-           'with test performance %f %%') %
-                 (best_validation_loss * 100., test_score * 100.))
-    print('The code run for %d epochs, with %f epochs/sec' % (
-        epoch, 1. * epoch / (end_time - start_time)))
-    print('The code ran for %.1fs' % ((end_time - start_time)))
+    print('validation(best): %f %% / test: %f %%' %
+         (best_validation_loss * 100, test_score * 100))
+    print('The code run for %d epochs, with %f epochs/sec' %
+        (epoch, epoch / (end_time - start_time)))
+    print('The code ran for %.1fs' % (end_time - start_time))
 
     print('Showing test set results')
     ys_pred = predict_model()
@@ -386,4 +378,4 @@ def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000, batch_size=100):
 
 
 if __name__ == '__main__':
-    sgd_optimization_mnist()
+    train_cell_classifier()
