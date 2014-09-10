@@ -405,32 +405,12 @@ def detect_board(photo_id, img, visualize):
     pat = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
     if pat is None:
         return False
+
+    # Extract patches
     depersp_img, xs, ys = pat
     margin = 0.1
     patches = {}
     patch_size = 80
-    initial_state = get_initial_configuration()
-
-    # Calculate rotation-invariant locations
-    common_occupied = []
-    common_empty = []
-    for i in range(1, 10):
-        for j in range(1, 10):
-            p = (i, j)
-            pt = (j, i)
-            if p in initial_state and pt in initial_state:
-                common_occupied.append(p)
-            elif p not in initial_state and pt not in initial_state:
-                common_empty.append(p)
-    print('Rot-invariant empty=%s occupied=%s' % (common_empty, common_occupied))
-
-
-    classifier_e = classify.CellEmptinessClassifier("params/cell_emptiness_20x20.json.bz2")
-
-    for (pos, patch) in patches.items():
-        print('Classify: %s -> %d' % (pos, classifier_e.classify(patch)))
-
-    pid_blacklist = set(["vy", "z", "b", "9", "2", "1"])
     for (ix, (x0, x1)) in enumerate(zip(xs, xs[1:])):
         dx = x1 - x0
         x0 = int(x0 - dx * margin)
@@ -443,13 +423,46 @@ def detect_board(photo_id, img, visualize):
             patches[(ix + 1, iy + 1)] = {
                 "image": cv2.resize(depersp_img[y0:y1, x0:x1], (patch_size, patch_size))
             }
-
     if visualize:
         for (pos, patch) in patches.items():
             cv2.imwrite(
                 "debug/patch-%s-%d%d.png" % (photo_id, pos[0], pos[1]),
                 patch["image"])
 
+    # Calculate rotation-invariant locations
+    initial_state = get_initial_configuration()
+    common_occupied = set()
+    common_empty = set()
+    for i in range(1, 10):
+        for j in range(1, 10):
+            p = (i, j)
+            pt = (j, i)
+            if p in initial_state and pt in initial_state:
+                common_occupied.add(p)
+            elif p not in initial_state and pt not in initial_state:
+                common_empty.add(p)
+    print('Rot-invariant empty=%s occupied=%s' % (common_empty, common_occupied))
+
+    # Guess rotation by using empty vs. occupied information.
+    classifier_e = classify.CellEmptinessClassifier("params/cell_emptiness_20x20.json.bz2")
+    non_informative = common_occupied | common_empty
+    vote_vertical = 0
+    vote_horizontal = 0
+    for (pos, patch) in patches.items():
+        if pos in non_informative:
+            continue
+        label, prob = classifier_e.classify(patch["image"])
+        vert_expect = 'occupied' if pos in initial_state else 'empty'
+        if label == vert_expect:
+            vote_vertical += 1
+        else:
+            vote_horizontal += 1
+    vertical = vote_vertical > vote_horizontal
+    print('%s: vertical=%s' % (photo_id, vertical))
+
+
+    # Generate empty vs. non-emtpy samples
+    pid_blacklist = set(["vy", "z", "b", "9", "2", "1"])
     if photo_id not in pid_blacklist:
         for pos in common_empty:
             cv2.imwrite(
