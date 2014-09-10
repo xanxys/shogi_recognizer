@@ -2,3 +2,5 @@ dataset/
 debug/
 derived/
 *.sublime-*
+
+*.pyc
