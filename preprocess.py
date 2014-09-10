@@ -12,6 +12,7 @@ import random
 import multiprocessing
 import traceback
 import itertools
+import classify
 
 
 def get_initial_configuration():
@@ -422,6 +423,12 @@ def detect_board(photo_id, img, visualize):
             elif p not in initial_state and pt not in initial_state:
                 common_empty.append(p)
     print('Rot-invariant empty=%s occupied=%s' % (common_empty, common_occupied))
+
+
+    classifier_e = classify.CellEmptinessClassifier("params/cell_emptiness_20x20.json.bz2")
+
+    for (pos, patch) in patches.items():
+        print('Classify: %s -> %d' % (pos, classifier_e.classify(patch)))
 
     pid_blacklist = set(["vy", "z", "b", "9", "2", "1"])
     for (ix, (x0, x1)) in enumerate(zip(xs, xs[1:])):

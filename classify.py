@@ -14,6 +14,31 @@ import json
 import bz2
 
 
+class CellEmptinessClassifier(object):
+    def __init__(self, path):
+        x = T.matrix('x')
+
+        self.regression = LogisticRegression(input=x, n_in=400, n_out=2)
+        self.regression.load_parameters(path)
+
+        self.classify_model = theano.function(
+            inputs=[x],
+            outputs=[self.regression.y_pred, self.regression.p_y_given_x])
+
+    def classify(self, img):
+        """
+        Return ("occuped" | "empty", probability of label being correct)
+        """
+        labels = {
+            0: "occupied",
+            1: "empty"
+        }
+        vec = preprocess_cell_image(img)
+        categories, probs = self.classify_model(vec.reshape([1, 400]))
+        category = categories[0]
+        return (labels[category], probs[0][category])
+
+
 class LogisticRegression(object):
     """Multi-class Logistic Regression Class
 
@@ -81,8 +106,12 @@ class LogisticRegression(object):
         Load model parameters written by dump_parameters.
         """
         blob = json.load(bz2.BZ2File(path, 'r'))
-        np.array(blob["W"])
-        np.array(blob["b"])
+        wp = np.array(blob["W"])
+        bp = np.array(blob["b"])
+        if wp.shape != (400, 2) or bp.shape != (2,):
+            raise RuntimeError("Imcompatible parameter shape")
+        self.W.set_value(wp)
+        self.b.set_value(bp)
 
     def negative_log_likelihood(self, y):
         """Return the mean of the negative log-likelihood of the prediction
@@ -236,7 +265,7 @@ def load_data():
     ]
 
 
-def train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, batch_size=100):
+def command_train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, batch_size=100):
     """
     Train logistic regression classifier {emtpy, occupied} with
     stochastic gradient descent.
@@ -407,6 +436,14 @@ def train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, batch_si
     classifier.dump_parameters(dump_path)
 
 
+def command_classify_images(param_path, img_paths):
+    classifier = CellEmptinessClassifier(param_path)
+    for img_path in img_paths:
+        img = cv2.imread(img_path)
+        label, prob = classifier.classify(img)
+        print('%s: %s with p=%f' % (img_path, label, prob))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="""
@@ -416,6 +453,22 @@ Train classifier.""",
         '--output', nargs='?', metavar='OUT_PATH', type=str, const=True,
         default='/dev/null',
         help='Parameter .json.bz2 output path')
+    parser.add_argument(
+        '--input', nargs='?', metavar='IN_PATH', type=str, const=True,
+        default=None,
+        help='Parameter .json.bz2 input path')
+
+    parser.add_argument(
+        '--classify', nargs='+', metavar='IMG_PATH', type=str,
+        default=None,
+        help='Classify cell images')
 
     args = parser.parse_args()
-    train_cell_classifier(args.output)
+
+    if args.classify is not None:
+        if args.input is None:
+            raise RuntimeError("Specify --input to classify")
+
+        command_classify_images(args.input, args.classify)
+    else:
+        command_train_cell_classifier(args.output)
