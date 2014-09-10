@@ -10,6 +10,8 @@ import os
 import os.path
 import random
 import time
+import json
+import bz2
 
 
 class LogisticRegression(object):
@@ -209,7 +211,7 @@ def load_data():
     ]
 
 
-def train_cell_classifier(learning_rate=0.13, n_epochs=1000, batch_size=100):
+def train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, batch_size=100):
     """
     Train logistic regression classifier {emtpy, occupied} with
     stochastic gradient descent.
@@ -376,6 +378,31 @@ def train_cell_classifier(learning_rate=0.13, n_epochs=1000, batch_size=100):
         n_all += 1
     print('Failure rate: %f' % (n_fail / n_all))
 
+    print('Writing classifier parameters to %s' % dump_path)
+    params_w = classifier.W.eval()
+    params_b = classifier.b.eval()
+    print('W:%s b:%s' % (params_w.shape, params_b.shape))
+
+    blob = {
+        "comment": "logistic regression, 20x20 image",
+        "categories": ["occupied", "empty"],
+        "failure": n_fail / n_all,
+        "W": map(list, params_w),
+        "b": list(params_b)
+    }
+    with bz2.BZ2File(dump_path, 'w') as bz2_stream:
+        json.dump(blob, bz2_stream, separators=(',', ':'))
+
 
 if __name__ == '__main__':
-    train_cell_classifier()
+    parser = argparse.ArgumentParser(
+        description="""
+Train classifier.""",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        '--output', nargs='?', metavar='OUT_PATH', type=str, const=True,
+        default='/dev/null',
+        help='Parameter .json.bz2 output path')
+
+    args = parser.parse_args()
+    train_cell_classifier(args.output)
