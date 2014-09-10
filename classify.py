@@ -59,6 +59,31 @@ class LogisticRegression(object):
         # parameters of the model
         self.params = [self.W, self.b]
 
+    def dump_parameters(self, path):
+        """
+        Dump model parameters to path in .json.bz2 format.
+        Although it's somewhat human readable, format
+        will not be stable.
+        """
+        params_w = self.W.eval()
+        params_b = self.b.eval()
+        blob = {
+            "comment": "logistic regression, 20x20 image",
+            "categories": ["occupied", "empty"],
+            "W": map(list, params_w),
+            "b": list(params_b)
+        }
+        with bz2.BZ2File(path, 'w') as bz2_stream:
+            json.dump(blob, bz2_stream, separators=(',', ':'))
+
+    def load_parameters(self, path):
+        """
+        Load model parameters written by dump_parameters.
+        """
+        blob = json.load(bz2.BZ2File(path, 'r'))
+        np.array(blob["W"])
+        np.array(blob["b"])
+
     def negative_log_likelihood(self, y):
         """Return the mean of the negative log-likelihood of the prediction
         of this model under a given target distribution.
@@ -379,19 +404,7 @@ def train_cell_classifier(dump_path, learning_rate=0.13, n_epochs=1000, batch_si
     print('Failure rate: %f' % (n_fail / n_all))
 
     print('Writing classifier parameters to %s' % dump_path)
-    params_w = classifier.W.eval()
-    params_b = classifier.b.eval()
-    print('W:%s b:%s' % (params_w.shape, params_b.shape))
-
-    blob = {
-        "comment": "logistic regression, 20x20 image",
-        "categories": ["occupied", "empty"],
-        "failure": n_fail / n_all,
-        "W": map(list, params_w),
-        "b": list(params_b)
-    }
-    with bz2.BZ2File(dump_path, 'w') as bz2_stream:
-        json.dump(blob, bz2_stream, separators=(',', ':'))
+    classifier.dump_parameters(dump_path)
 
 
 if __name__ == '__main__':

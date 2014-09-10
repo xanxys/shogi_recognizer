@@ -5,8 +5,9 @@ Detect shogi (chess-like game) board state from photo.
 
 Bootstrapping (planned)
 ----------
-Written here for someone in the future, not programatically reproducible.
-It's very hard and non-rewarding to maintain programs to insert manual
+Written here for reference. However this procedure is
+not programatically reproducible, because
+it's very hard and non-rewarding to maintain programs to insert manual
 annotation (mostly rejection of failed samples) here and there.
 
 1. Prepare photos with boards in the initial configuration `D0`
