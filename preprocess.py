@@ -290,7 +290,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         print('Angle too far from orthogonal')
         return None
     depersp_size = 900
-    margin = 25
+    margin = 5
     inliers0.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir1))
     inliers1.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir0))
     lxs = [inliers0[0], inliers0[-1]]
@@ -398,14 +398,15 @@ def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
     assert(len(xs) == 10)
     assert(len(ys) == 10)
     patches = {}
+    height, width, channels = ortho_image.shape
     for (ix, (x0, x1)) in enumerate(zip(xs, xs[1:])):
         dx = x1 - x0
-        x0 = int(x0 - dx * margin)
-        x1 = int(x1 + dx * margin)
+        x0 = max(0, int(x0 - dx * margin))
+        x1 = min(width - 1, int(x1 + dx * margin))
         for (iy, (y0, y1)) in enumerate(zip(ys, ys[1:])):
             dy = y1 - y0
-            y0 = int(y0 - dy * margin)
-            y1 = int(y1 + dy * margin)
+            y0 = max(0, int(y0 - dy * margin))
+            y1 = min(height - 1, int(y1 + dy * margin))
 
             raw_patch_image = ortho_image[y0:y1, x0:x1]
             patches[(10 - (ix + 1), iy + 1)] = {
