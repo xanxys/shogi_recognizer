@@ -546,22 +546,16 @@ def derive_typed_samples(photo_id, patches):
 
     initial_conf = get_initial_configuration()
     for (pos, patch) in patches.items():
-        metadata = {
-            "photo_id": photo_id,
-            "pos": pos,
-        }
+        img = patch["image"]
+        label = "empty"
         if pos in initial_conf:
-            metadata["empty"] = False
-            metadata["type"] = initial_conf[pos]
-            metadata["direction"] = "down" if pos[1] <= 3 else "up"
-        else:
-            metadata["empty"] = True
+            label = initial_conf[pos]
+            # down -> up
+            if pos[1] <= 3:
+                img = img[::-1, ::-1]
 
-        name = '%s-%d%d-%s-%s' % (
-            photo_id, pos[0], pos[1],
-            metadata.get("type", "emtpy"),
-            metadata.get("direction", "any"))
-        cv2.imwrite('derived/cells/%s.png' % name, patch["image"])
+        name = '%s-%d%d-%s' % (photo_id, pos[0], pos[1], label)
+        cv2.imwrite('derived/cells/%s.png' % name, img)
 
 
 def derive_empty_vs_nonempty_samples(photo_id, patches):
