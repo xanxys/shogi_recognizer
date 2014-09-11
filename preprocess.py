@@ -194,7 +194,7 @@ def detect_board_vps(photo_id, img, lines, visualize):
         for (ix, color) in [(0, (0, 0, 255)), (1, (0, 255, 0))]:
             for line in max_inliers[ix]:
                 draw_rhotheta_line(img_vps, line, color)
-        cv2.imwrite('debug/%s-vps.png' % photo_id, img_vps)
+        cv2.imwrite('debug/proc-%s-vps.png' % photo_id, img_vps)
     return (max_fov, max_ns)
 
 
@@ -277,7 +277,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         for (inliers, color) in [(inliers0, (0, 0, 255)), (inliers1, (0, 255, 0))]:
             for line in inliers:
                 draw_rhotheta_line(img_vps, line, color)
-        cv2.imwrite('debug/%s-vps-weak.png' % photo_id, img_vps)
+        cv2.imwrite('debug/proc-%s-vps-weak.png' % photo_id, img_vps)
     # Any pairs of X and Y lines will form a rectangle.
     # (Unless they're really small)
     #      ly0   ly1  (orders vary)
@@ -310,7 +310,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     if la.det(trans_persp) < 0:
         img_depersp = img_depersp[:, ::-1, :]
     if visualize:
-        cv2.imwrite('debug/%s-depersp.png' % photo_id, img_depersp)
+        cv2.imwrite('debug/proc-%s-depersp.png' % photo_id, img_depersp)
     # Now we can treat X and Y axis separately.
     # Detect 10 lines in X direction
     img_gray = cv2.cvtColor(img_depersp, cv.CV_BGR2GRAY)
@@ -327,7 +327,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
             draw_rhotheta_line(img_debug, line, (0, 0, 255))
         for line in ls_y:
             draw_rhotheta_line(img_debug, line, (0, 255, 0))
-        cv2.imwrite('debug/%s-ortho.png' % photo_id, img_debug)
+        cv2.imwrite('debug/proc-%s-ortho.png' % photo_id, img_debug)
     if len(ls_x) < 10 or len(ls_y) < 10:
         print('WARN: not enough XY lines')
         return None
@@ -336,7 +336,6 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     max_dx = (depersp_size - margin * 2) / 9
     xs = map(lambda line: rhotheta_to_cartesian(*line)[0][0], ls_x)
     ys = map(lambda line: rhotheta_to_cartesian(*line)[0][1], ls_y)
-    # Supply edges (which may or may not be gone in warping process)
     xs = find_9segments(xs, (min_dx, max_dx))
     ys = find_9segments(ys, (min_dx, max_dx))
     if visualize:
@@ -347,7 +346,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         for y in ys:
             y = int(y)
             cv2.line(img_debug, (0, y), (1000, y), (0, 255, 0), thickness=3)
-        cv2.imwrite('debug/%s-grid.png' % photo_id, img_debug)
+        cv2.imwrite('debug/proc-%s-grid.png' % photo_id, img_debug)
 
     if len(xs) == 10 and len(ys) == 10:
         return (img_depersp, xs, ys)
@@ -439,7 +438,7 @@ def detect_board(photo_id, img, visualize=False, derive=False):
     img_bin = cv2.adaptiveThreshold(
         img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 5)
     if visualize:
-        cv2.imwrite('debug/%s-binary.png' % photo_id, img_bin)
+        cv2.imwrite('debug/proc-%s-binary.png' % photo_id, img_bin)
     # Detect lines. None or [[(rho,theta)]]
     lines = detect_lines(img_bin, 30, 10)
     lines_weak = detect_lines(img_bin, 1000)
@@ -447,7 +446,7 @@ def detect_board(photo_id, img, visualize=False, derive=False):
         img_gray_w_lines = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR) * 0
         for line in lines:
             draw_rhotheta_line(img_gray_w_lines, line, (0, 0, 255))
-        cv2.imwrite('debug/%s-raw-lines.png' % photo_id, img_gray_w_lines)
+        cv2.imwrite('debug/proc-%s-raw-lines.png' % photo_id, img_gray_w_lines)
 
     pat = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
     if pat is None:
