@@ -11,7 +11,19 @@ import os.path
 import random
 import time
 import json
+import ujson
 import bz2
+
+
+def np_to_py(arr):
+    """
+    Convert numpy tensor to python nested list
+    for serialization.
+    """
+    if arr.ndim == 1:
+        return list(arr)
+    else:
+        return map(np_to_py, arr)
 
 
 class CellEmptinessClassifier(object):
@@ -44,12 +56,21 @@ class CellEmptinessClassifier(object):
                 self.mlp.logRegressionLayer.p_y_given_x])
 
     def dump_parameters(self, path):
-        pass
-        #self.regression.dump_parameters(path)
+        ser_params = []
+        for param in self.mlp.params:
+            ser_params.append(np_to_py(param.eval()))
+
+        blob = {
+            "comment": "logistic regression, 20x20 image",
+            "mlp": ser_params
+        }
+        with bz2.BZ2File(path, 'w') as bz2_stream:
+            json.dump(blob, bz2_stream, separators=(',', ':'))
 
     def load_parameters(self, path):
-        pass
-        #self.regression.load_parameters(path)
+        blob = json.load(bz2.BZ2File(path, 'r'))
+        for (p, val) in zip(self.mlp.params, blob["mlp"]):
+            p.set_value(np.array(val))
 
     def classify(self, img):
         """
@@ -304,13 +325,13 @@ class LogisticRegression(object):
             "b": list(params_b)
         }
         with bz2.BZ2File(path, 'w') as bz2_stream:
-            json.dump(blob, bz2_stream, separators=(',', ':'))
+            ujson.dump(blob, bz2_stream, separators=(',', ':'))
 
     def load_parameters(self, path):
         """
         Load model parameters written by dump_parameters.
         """
-        blob = json.load(bz2.BZ2File(path, 'r'))
+        blob = ujson.load(bz2.BZ2File(path, 'r'))
         self.W.set_value(np.array(blob["W"]))
         self.b.set_value(np.array(blob["b"]))
 
