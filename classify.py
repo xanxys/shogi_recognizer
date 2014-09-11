@@ -277,7 +277,7 @@ def load_up_dataset(classifier):
     categories = []
     table = classifier.get_label_to_category()
     print(table)
-    dir_path = 'derived/cells'
+    dir_path = 'derived/cells-types-up'
     for path in os.listdir(dir_path):
         photo_id, org_pos, ptype = os.path.splitext(path)[0].split('-')
         img_cell = cv2.imread(os.path.join(dir_path, path))

@@ -555,7 +555,7 @@ def derive_typed_samples(photo_id, patches):
                 img = img[::-1, ::-1]
 
         name = '%s-%d%d-%s' % (photo_id, pos[0], pos[1], label)
-        cv2.imwrite('derived/cells/%s.png' % name, img)
+        cv2.imwrite('derived/cells-types-up/%s.png' % name, img)
 
 
 def derive_empty_vs_nonempty_samples(photo_id, patches):
