@@ -209,34 +209,51 @@ def detect_board_vps(photo_id, img, lines, visualize):
 def find_9segments(xs, valid_width_range):
     """
     Find 10 values (with 9 intervals) in array of scalars.
-    return: 10 values in increasing order
+    return: candidates [10 values in increasing order]
     """
     min_dx, max_dx = valid_width_range
     ratio_thresh = 0.08
-    spl_xs = {}
-    n_gp = 0
+    good_seps = []
     xs.sort()
     for (x0, x1) in itertools.combinations(xs, 2):
-        #x0, x1 = random.sample(xs, 2)
         dx = abs(x1 - x0) / 9
         if not (min_dx <= dx <= max_dx):
             continue
         segs = {}
         for x in xs:
             t = (x - x0) / dx
-            key = round(t)
+            key = int(round(t))
             dt = abs(t - key)
             if dt < ratio_thresh:
                 segs.setdefault(key, []).append(x)
 
-        if len(segs) == 10 and max(segs.keys()) - min(segs.keys()) + 1 == 10:
-            #print('Good Pairs(premature)', n_gp)
-            n_gp += 1
-            spl_xs = segs
-            #break
-    else:
-        print('Good Pairs', n_gp)
-        return map(lambda e: e[0], spl_xs.values())
+        # Find 10-continuous keys
+        if len(segs) >= 10:
+            # Split into continuous segments
+            ks = sorted(segs.keys())
+            cont = [ks[0]]
+            cont_segs = []
+            for (prev_k, k) in zip(ks, ks[1:]):
+                if k == prev_k + 1:
+                    cont.append(k)
+                else:
+                    cont_segs.append(cont)
+                    cont = [k]
+            if len(cont) >= 1:
+                cont_segs.append(cont)
+
+            # Discard smaller than 10 segs
+            cont_segs = filter(lambda s: len(s) >= 10, cont_segs)
+
+            # Now report all 10-segment in cont_segs as candidate
+            for cs in cont_segs:
+                vs = [np.mean(segs[k]) for k in cs]
+                for i in range(len(cs) - 10 + 1):
+                    good_seps.append(vs[i:i+10])
+    # Although each seps contains 10 values,
+    # effective dimension is just g2.
+    # TODO: Bundle similar seps to reduce load in later steps
+    return good_seps
 
 
 def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
@@ -346,6 +363,12 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     ys = map(lambda line: rhotheta_to_cartesian(*line)[0][1], ls_y)
     xs = find_9segments(xs, (min_dx, max_dx))
     ys = find_9segments(ys, (min_dx, max_dx))
+    print("Lattice candidates: %dx%d" % (len(xs), len(ys)))
+    if len(xs) == 0 or len(ys) == 0:
+        print("Couldn't find grid for X or Y")
+        return None
+    xs = xs[0]
+    ys = ys[0]
     if visualize:
         img_debug = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR)
         for x in xs:
