@@ -20,7 +20,7 @@ class CellEmptinessClassifier(object):
         self.x = x
 
         self.regression = LogisticRegression(input=x, n_in=400, n_out=2)
-        self.negative_log_likelihood = self.regression.negative_log_likelihood
+        self.cost = self.regression.negative_log_likelihood
         self.errors = self.regression.errors
         self.params = self.regression.params
 
@@ -67,7 +67,7 @@ class CellTypeClassifierUp(object):
             inputs=[x],
             outputs=[self.regression.y_pred, self.regression.p_y_given_x])
 
-        self.negative_log_likelihood = self.regression.negative_log_likelihood
+        self.cost = self.regression.negative_log_likelihood
         self.errors = self.regression.errors
         self.params = self.regression.params
 
@@ -522,8 +522,8 @@ def train_sgd(datasets, model, learning_rate=0.13, n_epochs=1000, batch_size=100
     Use stochastic gradient descent to train model.
     model must expose following theano function/variables:
     * x
-    * negative_log_likelihood
-    * errors
+    * cost(y)
+    * errors(y)
     * params (list of theano variables)
 
     datasets: (train_set, valid_set, test_set)
@@ -538,15 +538,13 @@ def train_sgd(datasets, model, learning_rate=0.13, n_epochs=1000, batch_size=100
     n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size
     n_test_batches = test_set_x.get_value(borrow=True).shape[0] // batch_size
 
-   # allocate symbolic variables for the data
+    # allocate symbolic variables for the data
     index = T.lscalar()  # index to a [mini]batch
     x = model.x
     y = T.ivector('y')  # the labels are presented as 1D vector of
                            # [int] labels
 
-    # the cost we minimize during training is the negative log likelihood of
-    # the model in symbolic format
-    cost = model.negative_log_likelihood(y)
+    cost = model.cost(y)
 
     # compiling a Theano function that computes the mistakes that are made by
     # the model on a minibatch
