@@ -27,6 +27,61 @@ def np_to_py(arr):
         return map(np_to_py, arr)
 
 
+class CellValidnessClassifier(object):
+    def __init__(self):
+        x = T.matrix('x')
+        self.x = x
+
+        rng = np.random.RandomState(1234)
+        self.mlp = neuralnet.MLP(
+            input=x, n_in=400, rng=rng, n_hidden=10, n_out=2)
+
+        def gen_cost(y):
+            return (
+                self.mlp.negative_log_likelihood(y) +
+                self.mlp.L1 * 0 +
+                self.mlp.L2_sqr * 1e-4)
+        self.cost = gen_cost
+        self.errors = self.mlp.errors
+        self.params = self.mlp.params
+
+        self.classify_model = theano.function(
+            inputs=[x],
+            outputs=[
+                self.mlp.logRegressionLayer.y_pred,
+                self.mlp.logRegressionLayer.p_y_given_x])
+
+    def dump_parameters(self, path):
+        ser_params = []
+        for param in self.mlp.params:
+            ser_params.append(np_to_py(param.eval()))
+
+        blob = {
+            "comment": "MLP, 20x20 image",
+            "mlp": ser_params
+        }
+        with bz2.BZ2File(path, 'w') as bz2_stream:
+            json.dump(blob, bz2_stream, separators=(',', ':'))
+
+    def load_parameters(self, path):
+        blob = json.load(bz2.BZ2File(path, 'r'))
+        for (p, val) in zip(self.mlp.params, blob["mlp"]):
+            p.set_value(np.array(val))
+
+    def classify(self, img):
+        """
+        Return ("valid" | "invalid", probability of label being correct)
+        """
+        labels = {
+            0: "valid",
+            1: "invalid"
+        }
+        vec = preprocess_cell_image(img)
+        categories, probs = self.classify_model(vec.reshape([1, 400]))
+        category = categories[0]
+        return (labels[category], probs[0][category])
+
+
 class CellEmptinessClassifier(object):
     def __init__(self):
         x = T.matrix('x')
@@ -211,6 +266,77 @@ def load_data():
     }
     for path in os.listdir(dataset_path):
         photo_id, org_pos, label = os.path.splitext(path)[0].split('-')
+        img_cell = cv2.imread(os.path.join(dataset_path, path))
+
+        for img in produce_variant(img_cell, var_rotate=True):
+            samples.append(preprocess_cell_image(img))
+            labels.append(table[label])
+    # shuffle data
+    samples = np.vstack(samples)
+    labels = np.hstack(labels)
+    n = len(samples)
+    assert(len(labels) == n)
+    ixs = range(n)
+    random.shuffle(ixs)
+    samples = np.array([samples[ix] for ix in ixs])
+    labels = np.array([labels[ix] for ix in ixs])
+
+    # split 3:1:1 (train, validation, test)
+    x_train = samples[:int(n * 0.6)]
+    y_train = labels[:int(n * 0.6)]
+    x_validate = samples[int(n * 0.6):int(n * 0.8)]
+    y_validate = labels[int(n * 0.6):int(n * 0.8)]
+    x_test = samples[int(n * 0.8):]
+    y_test = labels[int(n * 0.8):]
+
+    print('Dataset size: all=%d : train=%d validate=%d test=%d' % (
+        n, len(x_train), len(x_validate), len(x_test)))
+
+    def shared_dataset(data_x, data_y, borrow=True):
+        """ Function that loads the dataset into shared variables
+
+        The reason we store our dataset in shared variables is to allow
+        Theano to copy it into the GPU memory (when code is run on GPU).
+        Since copying data into the GPU is slow, copying a minibatch everytime
+        is needed (the default behaviour if the data is not in a shared
+        variable) would lead to a large decrease in performance.
+        """
+        shared_x = theano.shared(
+            np.asarray(data_x, dtype=theano.config.floatX),
+            borrow=borrow)
+        shared_y = theano.shared(
+            np.asarray(data_y, dtype=theano.config.floatX),
+            borrow=borrow)
+        # When storing data on the GPU it has to be stored as floats
+        # therefore we will store the labels as ``floatX`` as well
+        # (``shared_y`` does exactly that). But during our computations
+        # we need them as ints (we use labels as index, and if they are
+        # floats it doesn't make sense) therefore instead of returning
+        # ``shared_y`` we will have to cast it to int. This little hack
+        # lets ous get around this issue
+        return (shared_x, T.cast(shared_y, 'int32'))
+
+    return [
+        shared_dataset(x_train, y_train),
+        shared_dataset(x_validate, y_validate),
+        shared_dataset(x_test, y_test)
+    ]
+
+
+def load_validness_data():
+    """
+    Loads the valid vs. invalid
+    """
+    print('Loading images')
+    samples = []
+    labels = []
+    dataset_path = 'derived/cells-validness'
+    table = {
+        "valid": 0,
+        "invalid": 1
+    }
+    for path in os.listdir(dataset_path):
+        label = os.path.splitext(path)[0].split('-')[-1]
         img_cell = cv2.imread(os.path.join(dataset_path, path))
 
         for img in produce_variant(img_cell, var_rotate=True):
@@ -509,6 +635,35 @@ def command_train_cell_classifier(dump_path):
     ct_classifier.dump_parameters(dump_path)
 
 
+def command_train_validness_classifier(dump_path):
+    ct_classifier = CellValidnessClassifier()
+    datasets = load_validness_data()
+
+    train_sgd(datasets, ct_classifier, learning_rate=0.05, batch_size=20, n_epochs=2000)
+
+    test_set_x, test_set_y = datasets[2]
+    predict_model = theano.function(
+        inputs=[],
+        outputs=ct_classifier.mlp.logRegressionLayer.y_pred,
+        givens={
+            ct_classifier.x: test_set_x})
+
+    print('Showing test set results')
+    ys_pred = predict_model()
+    n_all = 0
+    n_fail = 0
+    for (i, (tx, y, y_pred)) in enumerate(zip(test_set_x.eval(), test_set_y.eval(), ys_pred)):
+        result = 'success' if y == y_pred else 'fail'
+        cv2.imwrite('debug/classify-%s-%d.png' % (result, i), tx.reshape([20, 20]) * 255)
+        if y != y_pred:
+            n_fail += 1
+        n_all += 1
+    print('Failure rate: %f' % (n_fail / n_all))
+
+    print('Writing classifier parameters to %s' % dump_path)
+    ct_classifier.dump_parameters(dump_path)
+
+
 def command_train_types_up_classifier(param_path, learning_rate=0.13, n_epochs=1000, batch_size=100):
     print('Training upright cell type classifier (MLP)')
     ct_classifier = CellTypeClassifierUp()
@@ -522,7 +677,6 @@ def command_train_types_up_classifier(param_path, learning_rate=0.13, n_epochs=1
         outputs=ct_classifier.regression.y_pred,
         givens={
             ct_classifier.x: test_set_x})
-
 
     print('Showing test set results')
     ys_pred = predict_model()
@@ -588,6 +742,9 @@ Train classifier.""",
     parser.add_argument(
         '--train-types-up', action='store_true',
         help='Train upright piece type classifier (15 categories)')
+    parser.add_argument(
+        '--train-validness', action='store_true',
+        help='Train validness calssifier (2 categories)')
 
     args = parser.parse_args()
 
@@ -603,5 +760,7 @@ Train classifier.""",
         command_train_types_up_classifier(args.output)
     elif args.train_emptiness:
         command_train_cell_classifier(args.output)
+    elif args.train_validness:
+        command_train_validness_classifier(args.output)
     else:
         print('Specify model to train with --train-... argument')
