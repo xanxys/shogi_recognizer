@@ -15,6 +15,14 @@ import itertools
 import classify
 
 
+def clean_directory(dir_path):
+    """
+    Delete all files in dir_path.
+    """
+    for path in os.listdir(dir_path):
+        os.unlink(os.path.join(dir_path, path))
+
+
 def get_initial_configuration():
     """
     Return (pos, type)
@@ -636,6 +644,10 @@ Extract 9x9 cells from photos of shogi board.""",
 
     args = parser.parse_args()
     assert(args.j >= 1)
+    if args.derive_emptiness:
+        clean_directory("derived/cells-emptiness")
+    if args.derive_types_up:
+        clean_directory("derived/cells-types-up")
 
     pid_blacklist = set(args.blacklist)
 
