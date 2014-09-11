@@ -414,7 +414,7 @@ def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
     return patches
 
 
-def detect_board(photo_id, img, visualize=False, derive=False):
+def detect_board(photo_id, img, visualize=False, derive=None):
     """
     * photo_id: str
     * img: BGR image
@@ -461,9 +461,11 @@ def detect_board(photo_id, img, visualize=False, derive=False):
                 "debug/patch-%s-%d%d.png" % (photo_id, pos[0], pos[1]),
                 patch["image"])
 
-    if derive:
-        derive_typed_samples(photo_id, patches)
-        derive_empty_vs_nonempty_samples(photo_id, patches)
+    if derive is not None:
+        if derive.derive_emptiness:
+            derive_empty_vs_nonempty_samples(photo_id, patches)
+        if derive.derive_types_up:
+            derive_typed_samples(photo_id, patches)
 
     return True
 
@@ -576,16 +578,16 @@ def derive_empty_vs_nonempty_samples(photo_id, patches):
 
 
 def process_image(packed_args):
-    photo_id, img_path, debug, derive = packed_args
+    photo_id, img_path, args = packed_args
     print(img_path)
-    if debug:
+    if args.debug:
         print('WARN: using fixed seed 0 for debugging')
         random.seed(0)
 
     try:
         img = cv2.imread(img_path)
         print('processing %s: id=%s shape=%s' % (img_path, photo_id, img.shape))
-        detected = detect_board(str(photo_id), img, visualize=debug, derive=derive)
+        detected = detect_board(str(photo_id), img, visualize=args.debug, derive=args)
         if not detected:
             return {
                 "loaded": 1
@@ -615,8 +617,11 @@ Extract 9x9 cells from photos of shogi board.""",
         '-j', nargs='?', metavar='NUM_PROC', type=int, default=1, const=True,
         help='Number of parallel processes')
     parser.add_argument(
-        '--derive', action='store_true',
-        help='Derive training data')
+        '--derive-emptiness', action='store_true',
+        help='Derive emptiness training data')
+    parser.add_argument(
+        '--derive-types-up', action='store_true',
+        help='Derive upright types training data')
     parser.add_argument(
         '--debug', action='store_true',
         help='Dump debug images to ./debug/. Also fix random.seed.')
@@ -636,7 +641,7 @@ Extract 9x9 cells from photos of shogi board.""",
         pid = os.path.splitext(p)[0]
         if pid in pid_blacklist:
             continue
-        ls.append((pid, os.path.join(dir_path, p), args.debug, args.derive))
+        ls.append((pid, os.path.join(dir_path, p), args))
     # HACK: receive keyboard interrupt correctly
     # https://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
     results = pool.map_async(process_image, ls).get(1000)
