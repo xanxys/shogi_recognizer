@@ -108,7 +108,7 @@ class CellTypeClassifierUp(object):
 
     def dump_parameters(self, path):
         ser_params = []
-        for param in self.mlp.params:
+        for param in self.regression.params:
             ser_params.append(np_to_py(param.eval()))
 
         blob = {
