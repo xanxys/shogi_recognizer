@@ -215,6 +215,7 @@ def find_9segments(xs, valid_width_range):
     ratio_thresh = 0.08
     good_seps = []
     xs.sort()
+
     for (x0, x1) in itertools.combinations(xs, 2):
         dx = abs(x1 - x0) / 9
         if not (min_dx <= dx <= max_dx):
@@ -361,6 +362,19 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     max_dx = (depersp_size - margin * 2) / 9
     xs = map(lambda line: rhotheta_to_cartesian(*line)[0][0], ls_x)
     ys = map(lambda line: rhotheta_to_cartesian(*line)[0][1], ls_y)
+    if visualize:
+        import matplotlib.pyplot as plt
+        dxs = []
+        for (x0, x1) in itertools.combinations(xs, 2):
+            dxs.append(abs(x1 - x0))
+        plt.figure(photo_id)
+        plt.hist(dxs, bins=300)
+        plt.axvline(min_dx)
+        plt.axvline(max_dx)
+        plt.xlim(0, max_dx * 1.5)
+        plt.savefig('debug/hist-dx-%s.png' % photo_id)
+
+
     xs = find_9segments(xs, (min_dx, max_dx))
     ys = find_9segments(ys, (min_dx, max_dx))
     print("Lattice candidates: %dx%d" % (len(xs), len(ys)))
