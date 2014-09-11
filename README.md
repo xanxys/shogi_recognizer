@@ -29,7 +29,7 @@ Dataset & Classifiers
 * output: {empty, FU, ..., OU} (15 categories)
 
 ### validness
-* input: 80x80 RGB image of valid cell OR any other 80x80 image (including incorrectly cropped cells)
+* input: 80x80 RGB image of valid cell OR invalid patches generated from incorrect grid estimation
 * output: {invalid, valid} (2 categories)
 
 ### Word definitions
@@ -42,7 +42,7 @@ Programs
 ----------
 * `issue_id.py`: Merge files into a directory, assigning nice (safe, unique, short) keys
 * `preprocess.py`: Extract cell images from raw photos
-* `classify.py`: Train / use cell image classifier 
+* `classify.py`: Train / use cell image classifier
 
 
 

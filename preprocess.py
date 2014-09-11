@@ -456,12 +456,12 @@ def detect_board(photo_id, img, visualize=False, derive=None):
             draw_rhotheta_line(img_gray_w_lines, line, (0, 0, 255))
         cv2.imwrite('debug/proc-%s-raw-lines.png' % photo_id, img_gray_w_lines)
 
-    pat = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
-    if pat is None:
+    grid_pattern = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
+    if grid_pattern is None:
         return False
 
     # Extract patches
-    depersp_img, xs, ys = pat
+    depersp_img, xs, ys = grid_pattern
     patches = extract_patches(depersp_img, xs, ys)
     if visualize:
         for (pos, patch) in patches.items():
@@ -474,6 +474,8 @@ def detect_board(photo_id, img, visualize=False, derive=None):
             derive_empty_vs_nonempty_samples(photo_id, patches)
         if derive.derive_types_up:
             derive_typed_samples(photo_id, patches)
+        if derive.derive_validness:
+            derive_validness_samples(photo_id, patches, grid_pattern)
 
     return True
 
@@ -542,6 +544,33 @@ def is_vertical(patches):
             vote_horizontal += 1
     vertical = vote_vertical > vote_horizontal
     return vertical
+
+
+def derive_validness_samples(photo_id, patches_ok, grid_pattern):
+    depersp_img, xs, ys = grid_pattern
+    patches_bad = []
+
+    dx = xs[1] - xs[0]
+    dy = ys[1] - ys[0]
+
+    # off-by-0.5 error
+    xs_off = [x + dx * random.uniform(0.3, 0.7) for x in xs]
+    ys_off = [y + dy * random.uniform(0.3, 0.7) for y in ys]
+    patches_bad.append(extract_patches(depersp_img, xs_off, ys_off))
+
+    # outside
+    #extract_patches(depersp_img, )
+
+    for (pos, patch) in patches_ok.items():
+        img = patch["image"]
+        name = '%s-%d%d-valid' % (photo_id, pos[0], pos[1])
+        cv2.imwrite('derived/cells-validness/%s.png' % name, img)
+
+    for (i, patches) in enumerate(patches_bad):
+        for (pos, patch) in patches.items():
+            img = patch["image"]
+            name = '%s-%d-%d%d-invalid' % (photo_id, i, pos[0], pos[1])
+            cv2.imwrite('derived/cells-validness/%s.png' % name, img)
 
 
 def derive_typed_samples(photo_id, patches):
@@ -636,6 +665,9 @@ Extract 9x9 cells from photos of shogi board.""",
         '--derive-types-up', action='store_true',
         help='Derive upright types training data')
     parser.add_argument(
+        '--derive-validness', action='store_true',
+        help='Derive validness training data')
+    parser.add_argument(
         '--debug', action='store_true',
         help='Dump debug images to ./debug/. Also fix random.seed.')
     parser.add_argument(
@@ -648,6 +680,8 @@ Extract 9x9 cells from photos of shogi board.""",
         clean_directory("derived/cells-emptiness")
     if args.derive_types_up:
         clean_directory("derived/cells-types-up")
+    if args.derive_validness:
+        clean_directory("derived/cells-validness")
 
     pid_blacklist = set(args.blacklist)
 
