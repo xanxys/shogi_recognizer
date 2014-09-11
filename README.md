@@ -22,7 +22,7 @@ Programs
 ----------
 * `issue_id.py`: Merge files into a directory, assigning nice (safe, unique, short) keys
 * `preprocess.py`: Extract cell images from raw photos
-* `train.py`: Train cell image classifier
+* `classify.py`: Train / use cell image classifier 
 
 
 Useful Techniques
