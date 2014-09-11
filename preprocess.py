@@ -567,13 +567,18 @@ def derive_empty_vs_nonempty_samples(photo_id, patches):
     """
     # Generate empty vs. non-emtpy samples
     always_empty, always_occupied = get_rot_invariants_initial()
-    for pos in always_empty:
+    for (pos, patch) in patches.items():
+        label = None
+        if pos in always_empty:
+            label = "empty"
+        elif pos in always_occupied:
+            label = "occupied"
+        else:
+            continue
+
         cv2.imwrite(
-            'derived/cell-empty/%s-%d%d.png' % (photo_id, pos[0], pos[1]),
-            patches[pos]["image"])
-    for pos in always_occupied:
-        cv2.imwrite(
-            'derived/cell-occupied/%s-%d%d.png' % (photo_id, pos[0], pos[1]),
+            'derived/cells-emptiness/%s-%d%d-%s.png' % (
+                photo_id, pos[0], pos[1], label),
             patches[pos]["image"])
 
 

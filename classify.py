@@ -179,6 +179,24 @@ def load_all_samples_in(dir_path, var_rotate=False):
     return np.array(samples)
 
 
+def produce_variant(img_seed, var_rotate=False):
+    """
+    return [img_variant] from img_seed
+    """
+    variants = [img_seed]
+    if var_rotate:
+        new_variants = []
+        for img in variants:
+            new_variants += [
+                img,
+                img[::-1, ::-1],
+                img.transpose([1, 0, 2])[::-1],
+                img.transpose([1, 0, 2])[:, ::-1]
+            ]
+        variants = new_variants
+    return variants
+
+
 def load_data():
     """
     Loads the empty vs. non-empty dataset
@@ -186,13 +204,18 @@ def load_data():
     print('Loading images')
     samples = []
     labels = []
-    for (category, name) in [(0, "occupied"), (1, "empty")]:
-        dataset_path = 'derived/cell-%s' % name
-        samples_cat = load_all_samples_in(dataset_path, var_rotate=True)
-        cv2.imwrite('debug/%s.png' % name, samples_cat * 255)
-        labels_cat = np.ones([len(samples_cat)]) * category
-        samples.append(samples_cat)
-        labels.append(labels_cat)
+    dataset_path = 'derived/cells-emptiness'
+    table = {
+        "occupied": 0,
+        "empty": 1
+    }
+    for path in os.listdir(dataset_path):
+        photo_id, org_pos, label = os.path.splitext(path)[0].split('-')
+        img_cell = cv2.imread(os.path.join(dataset_path, path))
+
+        for img in produce_variant(img_cell, var_rotate=True):
+            samples.append(preprocess_cell_image(img))
+            labels.append(table[label])
     # shuffle data
     samples = np.vstack(samples)
     labels = np.hstack(labels)
