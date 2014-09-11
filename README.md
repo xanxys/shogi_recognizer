@@ -14,8 +14,9 @@ annotation (mostly rejection of failed samples) here and there.
 2. Extract piece patches from `D0` using (non-ML) image processing pipeline
 3. Collect empty vs. non-empty labels using rotation-invariance, and train classifier `C0`
 4. Use `C0` to `D0` and guess rotation
-5. With rotations, we get labels for empty and non-promoted piece types , train classifier `C1` (also re-train `C0` -> `C0'`) (__<- we're here__)
-6. ???
+5. With rotations, we get labels for empty and non-promoted piece types , train classifier `C1` (also re-train `C0` -> `C0'`)
+6. Train cell validness classifier `C2` using `D0` (__<- we're here__)
+7. Use `C2` to aid grid estimation in step 2
 
 
 Dataset & Classifiers
