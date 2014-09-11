@@ -569,9 +569,6 @@ def train_sgd(datasets, model, learning_rate=0.13, n_epochs=1000, batch_size=100
     for param in model.params:
         g_params.append(T.grad(cost=cost, wrt=param))
 
-    # g_W = T.grad(cost=cost, wrt=model.W)
-    # g_b = T.grad(cost=cost, wrt=model.b)
-
     # specify how to update the parameters of the model as a list of
     # (variable, update expression) pairs.
     updates = [
@@ -654,11 +651,10 @@ def train_sgd(datasets, model, learning_rate=0.13, n_epochs=1000, batch_size=100
                 break
 
     end_time = time.clock()
-    print('validation(best): %f %% / test: %f %%' %
-         (best_validation_loss * 100, test_score * 100))
-    print('The training run for %d epochs, with %f epochs/sec' %
-        (epoch, epoch / (end_time - start_time)))
-    print('The training ran for %.1fs' % (end_time - start_time))
+
+    duration = end_time - start_time
+    print('validation(best): %f %% | test: %f %%' % (best_validation_loss * 100, test_score * 100))
+    print('%d epochs | %.1fsec | %fepoch/sec' % (epoch, duration, epoch / duration))
 
 
 
