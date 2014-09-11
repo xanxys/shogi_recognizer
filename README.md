@@ -18,11 +18,32 @@ annotation (mostly rejection of failed samples) here and there.
 6. ???
 
 
+Dataset & Classifiers
+----------
+### emptiness
+* input: 80x80 RGB image of valid cell
+* output: {empty, occupied} (2 categories)
+
+### types-up
+* input: 80x80 RGB image of valid cell, piece must point upward if applicable
+* output: {empty, FU, ..., OU} (15 categories)
+
+### validness
+* input: 80x80 RGB image of valid cell OR any other 80x80 image (including incorrectly cropped cells)
+* output: {invalid, valid} (2 categories)
+
+### Word definitions
+#### valid cell
+A cell with or without a piece. If a piece exists, it must point one
+of the 4 directions.
+
+
 Programs
 ----------
 * `issue_id.py`: Merge files into a directory, assigning nice (safe, unique, short) keys
 * `preprocess.py`: Extract cell images from raw photos
 * `classify.py`: Train / use cell image classifier 
+
 
 
 Useful Techniques
