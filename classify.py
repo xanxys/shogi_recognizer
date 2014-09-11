@@ -22,8 +22,7 @@ class CellEmptinessClassifier(object):
         self.regression = LogisticRegression(input=x, n_in=400, n_out=2)
         self.negative_log_likelihood = self.regression.negative_log_likelihood
         self.errors = self.regression.errors
-        self.W = self.regression.W
-        self.b = self.regression.b
+        self.params = self.regression.params
 
         self.classify_model = theano.function(
             inputs=[x],
@@ -70,8 +69,7 @@ class CellTypeClassifierUp(object):
 
         self.negative_log_likelihood = self.regression.negative_log_likelihood
         self.errors = self.regression.errors
-        self.W = self.regression.W
-        self.b = self.regression.b
+        self.params = self.regression.params
 
     def load_parameters(self, path):
         self.regression.load_parameters(path)
@@ -526,8 +524,7 @@ def train_sgd(datasets, model, learning_rate=0.13, n_epochs=1000, batch_size=100
     * x
     * negative_log_likelihood
     * errors
-    * W
-    * b
+    * params (list of theano variables)
 
     datasets: (train_set, valid_set, test_set)
     """
@@ -568,13 +565,18 @@ def train_sgd(datasets, model, learning_rate=0.13, n_epochs=1000, batch_size=100
             y: valid_set_y[index * batch_size:(index + 1) * batch_size]})
 
     # compute the gradient of cost with respect to theta = (W,b)
-    g_W = T.grad(cost=cost, wrt=model.W)
-    g_b = T.grad(cost=cost, wrt=model.b)
+    g_params = []
+    for param in model.params:
+        g_params.append(T.grad(cost=cost, wrt=param))
+
+    # g_W = T.grad(cost=cost, wrt=model.W)
+    # g_b = T.grad(cost=cost, wrt=model.b)
 
     # specify how to update the parameters of the model as a list of
     # (variable, update expression) pairs.
-    updates = [(model.W, model.W - learning_rate * g_W),
-               (model.b, model.b - learning_rate * g_b)]
+    updates = [
+        (param, param - learning_rate * g_param) for
+        (param, g_param) in zip(model.params, g_params)]
 
     # compiling a Theano function `train_model` that returns the cost, but in
     # the same time updates the parameter of the model based on the rules
