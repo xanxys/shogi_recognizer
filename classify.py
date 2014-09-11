@@ -19,20 +19,37 @@ class CellEmptinessClassifier(object):
         x = T.matrix('x')
         self.x = x
 
-        self.regression = LogisticRegression(input=x, n_in=400, n_out=2)
-        self.cost = self.regression.negative_log_likelihood
-        self.errors = self.regression.errors
-        self.params = self.regression.params
+        # self.regression = LogisticRegression(input=x, n_in=400, n_out=2)
+        # self.cost = self.regression.negative_log_likelihood
+        # self.errors = self.regression.errors
+        # self.params = self.regression.params
+
+        rng = np.random.RandomState(1234)
+        self.mlp = MLP(input=x, n_in=400, rng=rng, n_hidden=10, n_out=2)
+
+        # y = T.ivector('y')
+        def gen_cost(y):
+            return (
+                self.mlp.negative_log_likelihood(y) +
+                self.mlp.L1 * 0 +
+                self.mlp.L2_sqr * 1e-4)
+        self.cost = gen_cost
+        self.errors = self.mlp.errors
+        self.params = self.mlp.params
 
         self.classify_model = theano.function(
             inputs=[x],
-            outputs=[self.regression.y_pred, self.regression.p_y_given_x])
+            outputs=[
+                self.mlp.logRegressionLayer.y_pred,
+                self.mlp.logRegressionLayer.p_y_given_x])
 
     def dump_parameters(self, path):
-        self.regression.dump_parameters(path)
+        pass
+        #self.regression.dump_parameters(path)
 
     def load_parameters(self, path):
-        self.regression.load_parameters(path)
+        pass
+        #self.regression.load_parameters(path)
 
     def classify(self, img):
         """
@@ -671,12 +688,12 @@ def command_train_cell_classifier(dump_path):
     ct_classifier = CellEmptinessClassifier()
     datasets = load_data()
 
-    train_sgd(datasets, ct_classifier)
+    train_sgd(datasets, ct_classifier, learning_rate=0.05, batch_size=20, n_epochs=2000)
 
     test_set_x, test_set_y = datasets[2]
     predict_model = theano.function(
         inputs=[],
-        outputs=ct_classifier.regression.y_pred,
+        outputs=ct_classifier.mlp.logRegressionLayer.y_pred,
         givens={
             ct_classifier.x: test_set_x})
 
