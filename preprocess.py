@@ -13,6 +13,7 @@ import multiprocessing
 import traceback
 import itertools
 import classify
+import lsd
 
 
 def clean_directory(dir_path):
@@ -339,29 +340,45 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         cv2.imwrite('debug/proc-%s-depersp.png' % photo_id, img_depersp)
     # Now we can treat X and Y axis separately.
     # Detect 10 lines in X direction
+    min_dx = (depersp_size - margin * 2) / 2 / 9  # assume at least half of the image is covered by board
+    max_dx = (depersp_size - margin * 2) / 9
     img_gray = cv2.cvtColor(img_depersp, cv.CV_BGR2GRAY)
-    img_bin = cv2.adaptiveThreshold(
-        img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 5)
-    thresh = 0.01
-    ls = detect_lines(img_bin, 500)
-    ls_x = filter(lambda (rho, theta): abs(theta) < thresh, ls)
-    ls_y = filter(lambda (rho, theta): abs(theta - math.pi / 2) < thresh, ls)
+#    img_bin = cv2.adaptiveThreshold(
+#        img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 5)
+    thresh = 5
+    ls = map(lambda l: l[:4], lsd.detect_line_segments(img_gray.astype(np.float64), log_eps=-1))
+    ls_x = []
+    ls_y = []
+    ls_others = []
+    for l in ls:
+        l = map(int, l)
+        x0, y0, x1, y1 = l
+        length = la.norm(np.array([x0 - x1, y0 - y1]))
+        if length < min_dx * 0.9:
+            continue
+        if abs(x1 - x0) < thresh:
+            ls_x.append(l)
+        elif abs(y1 - y0) < thresh:
+            ls_y.append(l)
+        else:
+            ls_others.append(l)
+
     print('OrthoLine:%d X:%d Y:%d' % (len(ls), len(ls_x), len(ls_y)))
     if visualize:
         img_debug = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR)
-        for line in ls_x:
-            draw_rhotheta_line(img_debug, line, (0, 0, 255))
-        for line in ls_y:
-            draw_rhotheta_line(img_debug, line, (0, 255, 0))
+        for (x0, y0, x1, y1) in ls_x:
+            cv2.line(img_debug, (x0, y0), (x1, y1), (0, 0, 255), thickness=3)
+        for (x0, y0, x1, y1) in ls_y:
+            cv2.line(img_debug, (x0, y0), (x1, y1), (0, 255, 0), thickness=3)
+        for (x0, y0, x1, y1) in ls_others:
+            cv2.line(img_debug, (x0, y0), (x1, y1), (255, 0, 0))
         cv2.imwrite('debug/proc-%s-ortho.png' % photo_id, img_debug)
     if len(ls_x) < 10 or len(ls_y) < 10:
         print('WARN: not enough XY lines')
         return None
     # Detect repetition in each axis
-    min_dx = (depersp_size - margin * 2) / 2 / 9  # assume at least half of the image is covered by board
-    max_dx = (depersp_size - margin * 2) / 9
-    xs = map(lambda line: rhotheta_to_cartesian(*line)[0][0], ls_x)
-    ys = map(lambda line: rhotheta_to_cartesian(*line)[0][1], ls_y)
+    xs = map(lambda line: line[0], ls_x)
+    ys = map(lambda line: line[1], ls_y)
     if visualize:
         import matplotlib.pyplot as plt
         dxs = []
