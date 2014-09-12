@@ -36,7 +36,8 @@ Dataset & Classifiers
 ### Word definitions
 #### valid cell
 A cell with or without a piece. If a piece exists, it must point one
-of the 4 directions.
+of the 4 directions. Also, cell square must be contained completely
+in the image (touching edge is ok).
 
 
 Programs
