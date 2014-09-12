@@ -368,10 +368,10 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         for (x0, x1) in itertools.combinations(xs, 2):
             dxs.append(abs(x1 - x0))
         plt.figure(photo_id)
-        plt.hist(dxs, bins=300)
+        plt.hist(dxs, bins=2000)
         plt.axvline(min_dx)
         plt.axvline(max_dx)
-        plt.xlim(0, max_dx * 1.5)
+        plt.xlim(min_dx * 0.8, max_dx * 1.2)
         plt.savefig('debug/hist-dx-%s.png' % photo_id)
 
 
@@ -379,7 +379,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     ys = find_9segments(ys, (min_dx, max_dx))
     print("Lattice candidates: %dx%d" % (len(xs), len(ys)))
     if len(xs) == 0 or len(ys) == 0:
-        print("Couldn't find grid for X or Y")
+        print("WARN: Couldn't find grid for X or Y")
         return None
     xs = xs[0]
     ys = ys[0]
@@ -500,6 +500,24 @@ def detect_board(photo_id, img, visualize=False, derive=None):
     # Extract patches
     depersp_img, xs, ys = grid_pattern
     patches = extract_patches(depersp_img, xs, ys)
+
+    # Check patch validness
+    param_path = "params/cell_validness_20x20_mlp.json.bz2"
+    classifier_v = classify.CellValidnessClassifier()
+    classifier_v.load_parameters(param_path)
+    p_valid = 1.0
+    for patch in patches.values():
+        label, prob = classifier_v.classify(patch["image"])
+        if label == "valid":
+            p_valid *= prob
+        else:
+            p_valid *= 1 - prob
+    p_valid = p_valid ** (1 / len(patches))
+    print("Patch Validness pid=%s p=%f" % (photo_id, p_valid))
+    if p_valid < 0.8:
+        print("WARN: rejecting due to low validness score")
+        return False
+
     if visualize:
         for (pos, patch) in patches.items():
             cv2.imwrite(
