@@ -47,6 +47,13 @@ Programs
 * `classify.py`: Train / use cell image classifier
 
 
+Dependency
+----------
+You need [lsd-python](https://github.com/xanxys/lsd-python) line segment
+detector to run `./preprocess.py`. Note that lsd-python is Affero GPL3,
+while this repo is MIT licensed (i.e. You can't use this python code
+on server side without disclosing server source code).
+
 
 Useful Techniques
 ----------
