@@ -343,8 +343,6 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     min_dx = (depersp_size - margin * 2) / 2 / 9  # assume at least half of the image is covered by board
     max_dx = (depersp_size - margin * 2) / 9
     img_gray = cv2.cvtColor(img_depersp, cv.CV_BGR2GRAY)
-#    img_bin = cv2.adaptiveThreshold(
-#        img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 5)
     thresh = 5
     ls = map(lambda l: l[:4], lsd.detect_line_segments(img_gray.astype(np.float64), log_eps=-1))
     ls_x = []
@@ -354,8 +352,14 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         l = map(int, l)
         x0, y0, x1, y1 = l
         length = la.norm(np.array([x0 - x1, y0 - y1]))
-        if length < min_dx * 0.9:
+        # reject too short segments (most likely letters and piece boundaries)
+        if length < min_dx:
             continue
+        # reject too long segments (LSD will detect both sides of grid lines,
+        # so cell segments will be shorter than 1 cell)
+        if length > max_dx:
+            continue
+
         if abs(x1 - x0) < thresh:
             ls_x.append(l)
         elif abs(y1 - y0) < thresh:
@@ -367,9 +371,9 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     if visualize:
         img_debug = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR)
         for (x0, y0, x1, y1) in ls_x:
-            cv2.line(img_debug, (x0, y0), (x1, y1), (0, 0, 255), thickness=3)
+            cv2.line(img_debug, (x0, y0), (x1, y1), (0, 0, 255), thickness=2)
         for (x0, y0, x1, y1) in ls_y:
-            cv2.line(img_debug, (x0, y0), (x1, y1), (0, 255, 0), thickness=3)
+            cv2.line(img_debug, (x0, y0), (x1, y1), (0, 255, 0), thickness=2)
         for (x0, y0, x1, y1) in ls_others:
             cv2.line(img_debug, (x0, y0), (x1, y1), (255, 0, 0))
         cv2.imwrite('debug/proc-%s-ortho.png' % photo_id, img_debug)
@@ -384,12 +388,26 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         dxs = []
         for (x0, x1) in itertools.combinations(xs, 2):
             dxs.append(abs(x1 - x0))
+
         plt.figure(photo_id)
         plt.hist(dxs, bins=2000)
         plt.axvline(min_dx)
         plt.axvline(max_dx)
         plt.xlim(min_dx * 0.8, max_dx * 1.2)
         plt.savefig('debug/hist-dx-%s.png' % photo_id)
+
+    def get_probable(vs):
+        dvs = []
+        for (v0, v1) in itertools.combinations(vs, 2):
+            dvs.append(abs(v1 - v0))
+        hist, bin_edges = np.histogram(dvs, bins=2000)
+        return max(
+            filter(lambda (h, be): min_dx < be < max_dx, zip(hist, bin_edges)),
+            key=lambda (h, be): h)[1]
+
+    p_dx = get_probable(xs)
+    p_dy = get_probable(ys)
+    print("Probable grid dx:%f x dy:%f" % (p_dx, p_dy))
 
 
     xs = find_9segments(xs, (min_dx, max_dx))
