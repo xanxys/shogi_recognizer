@@ -13,6 +13,7 @@ import multiprocessing
 import traceback
 import itertools
 import classify
+import cairo
 import lsd
 
 
@@ -258,6 +259,18 @@ def find_9segments(xs, valid_width_range):
     return good_seps
 
 
+def visualize_1d(arr, normalize=True, height=50):
+    """
+    Create horizontally long strip image to visualize 1D
+    array.
+    """
+    width = len(arr)
+    img = arr.reshape([1, width])
+    if normalize:
+        img *= 255 / max(arr)
+    return cv2.resize(img, (width, height))
+
+
 def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     """
     Detect shogi board pattern in lines.
@@ -405,33 +418,67 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
             filter(lambda (h, be): min_dx < be < max_dx, zip(hist, bin_edges)),
             key=lambda (h, be): h)[1]
 
+    def get_rep(vs):
+        w_size = depersp_size
+        assert(max(vs) < w_size)
+        arr = np.zeros([w_size], np.float32)
+        for v in vs:
+            arr[int(v)] += 1
+        cv2.imwrite('debug/imp-%s.png' % photo_id, visualize_1d(arr))
+        freq = np.abs(np.fft.rfft(arr))
+        freq[0] = 0  # delete DC component
+        cv2.imwrite('debug/fourier-%s.png' % photo_id, visualize_1d(freq))
+
+        return np.argmax(freq) * 2
+
     p_dx = get_probable(xs)
+    #p_dx_f = get_rep(xs)
     p_dy = get_probable(ys)
     print("Probable grid dx:%f x dy:%f" % (p_dx, p_dy))
+    #print("Prob grid(FFT): dx:%f" % p_dx_f)
 
+    def get_phase(vs, delta):
+        ps = [v % delta for v in vs]
+        #m = np.mean(ps)
+        return np.median(ps)
+        if visualize and False:
+            plt.figure(photo_id + "p")
+            plt.hist(ps, bins=100)
+            plt.axvline(m)
+            plt.axvline(med, c='red')
+            plt.savefig('debug/hist-dx-phase-%s.png' % photo_id)
+        return med
 
-    xs = find_9segments(xs, (min_dx, max_dx))
-    ys = find_9segments(ys, (min_dx, max_dx))
-    print("Lattice candidates: %dx%d" % (len(xs), len(ys)))
-    if len(xs) == 0 or len(ys) == 0:
-        print("WARN: Couldn't find grid for X or Y")
-        return None
-    xs = xs[0]
-    ys = ys[0]
+    ph_x = get_phase(xs, p_dx)
+    ph_y = get_phase(ys, p_dy)
+    print("Probable phase px:%f py:%f" % (ph_x, ph_y))
+
+    grid_desc = ((p_dx, ph_x), (p_dy, ph_y))
+
+    # xs = find_9segments(xs, (min_dx, max_dx))
+    # ys = find_9segments(ys, (min_dx, max_dx))
+    # print("Lattice candidates: %dx%d" % (len(xs), len(ys)))
+    # if len(xs) == 0 or len(ys) == 0:
+    #     print("WARN: Couldn't find grid for X or Y")
+    #     return None
+    # xs = xs[0]
+    # ys = ys[0]
     if visualize:
         img_debug = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR)
-        for x in xs:
-            x = int(x)
+        for ix in range(20):
+            x = int(p_dx * ix + ph_x)
             cv2.line(img_debug, (x, 0), (x, 1000), (0, 0, 255), thickness=3)
-        for y in ys:
-            y = int(y)
+        for iy in range(20):
+            y = int(p_dy * iy + ph_y)
             cv2.line(img_debug, (0, y), (1000, y), (0, 255, 0), thickness=3)
         cv2.imwrite('debug/proc-%s-grid.png' % photo_id, img_debug)
 
-    if len(xs) == 10 and len(ys) == 10:
-        return (img_depersp, xs, ys)
-    else:
-        return None
+    return (img_depersp, grid_desc)
+
+    # if len(xs) == 10 and len(ys) == 10:
+    #     return (img_depersp, xs, ys)
+    # else:
+    #     return None
 
 
 def detect_lines(img_bin, num_lines_target, n_iterations=5):
@@ -469,6 +516,29 @@ def draw_rhotheta_line(img, line, color):
     cv2.line(img, p0, p1, color, lineType=cv.CV_AA)
 
 
+def extract_patches_raw(ortho_image, xs, ys, margin=0.1, patch_size=80):
+    """
+    xs, ys: ticks of grid (in increasing order)
+    Extract 9^2 square patches from ortho_image.
+    """
+    assert(len(xs) >= 2)
+    assert(len(ys) >= 2)
+    patches = {}
+    height, width, channels = ortho_image.shape
+    for (ix, (x0, x1)) in enumerate(zip(xs, xs[1:])):
+        dx = x1 - x0
+        x0 = max(0, int(x0 - dx * margin))
+        x1 = min(width - 1, int(x1 + dx * margin))
+        for (iy, (y0, y1)) in enumerate(zip(ys, ys[1:])):
+            dy = y1 - y0
+            y0 = max(0, int(y0 - dy * margin))
+            y1 = min(height - 1, int(y1 + dy * margin))
+
+            raw_patch_image = ortho_image[y0:y1, x0:x1]
+            patches[(ix, iy)] = cv2.resize(raw_patch_image, (patch_size, patch_size))
+    return patches
+
+
 def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
     """
     xs, ys: ticks of grid (in increasing order)
@@ -492,6 +562,19 @@ def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
                 "image": cv2.resize(raw_patch_image, (patch_size, patch_size))
             }
     return patches
+
+
+def to_cairo_surface(img):
+    """
+    Convert OpenCV BGR image to cairo.ImageSurface
+    """
+    h, w, c = img.shape
+    assert(c == 3)
+    # BGR -> BGRX(little endian)
+    arr = np.zeros([h, w, 4], np.uint8)
+    arr[:, :, :3] = img[:, :, :]
+    return cairo.ImageSurface.create_for_data(
+        arr, cairo.FORMAT_RGB24, w, h)
 
 
 def detect_board(photo_id, img, visualize=False, derive=None):
@@ -533,31 +616,92 @@ def detect_board(photo_id, img, visualize=False, derive=None):
         return False
 
     # Extract patches
-    depersp_img, xs, ys = grid_pattern
-    patches = extract_patches(depersp_img, xs, ys)
+    depersp_img, gp = grid_pattern
+    depersp_size = depersp_img.shape[0]
 
-    # Check patch validness
+    def fp_to_vs(dv, pv):
+        vs = [pv + dv * i for i in range(int(depersp_size / dv) + 1)]
+        return filter(lambda v: 0 <= v < depersp_size, vs)
+
     param_path = "params/cell_validness_20x20_mlp.json.bz2"
     classifier_v = classify.CellValidnessClassifier()
     classifier_v.load_parameters(param_path)
-    p_valid = 1.0
-    for patch in patches.values():
-        label, prob = classifier_v.classify(patch["image"])
-        if label == "valid":
-            p_valid *= prob
-        else:
-            p_valid *= 1 - prob
-    p_valid = p_valid ** (1 / len(patches))
-    print("Patch Validness pid=%s p=%f" % (photo_id, p_valid))
-    if p_valid < 0.8:
+
+    xs = fp_to_vs(*gp[0])
+    ys = fp_to_vs(*gp[1])
+    # Extract best range
+    if len(xs) < 10 or len(ys) < 10:
+        print("%s: not enough cells" % photo_id)
+        return False
+
+    patches_raw = extract_patches_raw(depersp_img, xs, ys)
+    probs_raw = {}
+    for (pos, img) in patches_raw.items():
+        label, prob = classifier_v.classify(img)
+        p_valid = prob if label == "valid" else 1 - prob
+        probs_raw[pos] = p_valid
+
+    # TODO: You can use integral image + log to increase speed
+    # by x81.
+    best_p = 0
+    best_offset = None
+    for idx in range(len(xs) - 9):
+        for idy in range(len(ys) - 9):
+            p = 1.0
+            for ix in range(9):
+                for iy in range(9):
+                    p *= probs_raw[(ix + idx, iy + idy)]
+            if p > best_p:
+                best_p = p
+                best_offset = (idx, idy)
+
+    if visualize:
+        debug_img = depersp_img.copy()
+
+        surf = to_cairo_surface(debug_img)
+        ctx = cairo.Context(surf)
+        # validness of individual cells
+        for ((ix, iy), prob) in probs_raw.items():
+            p0 = gp[0][1] + gp[0][0] * ix
+            p1 = gp[1][1] + gp[1][0] * iy
+            # blue:valid red:invalid
+            ctx.set_source_rgba(1 - prob, 0, prob, 0.3)
+            ctx.rectangle(
+                p0, p1,
+                gp[0][0], gp[1][0])
+            ctx.fill()
+            ctx.set_source_rgb(0, 0, 0)
+            ctx.save()
+            ctx.translate(p0, p1 + gp[1][0])
+            ctx.scale(2, 2)
+            ctx.show_text("%.2f" % prob)
+            ctx.restore()
+        # best grid
+        ctx.set_source_rgb(0, 1, 0)
+        ctx.set_line_width(2)
+        ctx.rectangle(
+            xs[best_offset[0]],
+            ys[best_offset[1]],
+            xs[best_offset[0] + 9] - xs[best_offset[0]],
+            ys[best_offset[1] + 9] - ys[best_offset[1]])
+        ctx.stroke()
+        ctx.save()
+        ctx.translate(xs[best_offset[0]], ys[best_offset[1]])
+        ctx.scale(4, 4)
+        ctx.show_text("%.2f" % best_p ** (1 / 81))
+        ctx.restore()
+        surf.write_to_png("debug/%s-validness.png" % photo_id)
+
+    p_valid_grid = best_p ** (1 / 81)
+    print("Patch Validness pid=%s p=%f" % (photo_id, p_valid_grid))
+    if p_valid_grid < 0.75:
         print("WARN: rejecting due to low validness score")
         return False
 
-    if visualize:
-        for (pos, patch) in patches.items():
-            cv2.imwrite(
-                "debug/patch-%s-%d%d.png" % (photo_id, pos[0], pos[1]),
-                patch["image"])
+    # Extract patches
+    patches = extract_patches(depersp_img,
+        xs[best_offset[0] : best_offset[0] + 10],
+        ys[best_offset[1] : best_offset[1] + 10])
 
     if derive is not None:
         if derive.derive_emptiness:
