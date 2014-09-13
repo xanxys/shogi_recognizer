@@ -61,6 +61,11 @@ Useful Techniques
 `./preprocess.py --debug` forces fixed seed, with that, you can update `--blacklist` to reject bad data after inspecting data.
 
 
+Recognition Steps
+----------
+![9x9 Grid Detection](doc/validness.jpeg)
+
+
 References
 ----------
 * [J. C. Bazin, et al.: 3-line RANSAC for Orthogonal Vanishing Point Detection, IROS, 2012](http://graphics.ethz.ch/~jebazin/papers/IROS_2012.pdf)
