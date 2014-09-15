@@ -121,7 +121,7 @@ def point_to_direction(focal_px, center, pt):
     return d
 
 
-def detect_board_vps(photo_id, img, lines, visualize):
+def detect_board_vps(photo_id, img_shape, lines, visualize):
     """
     Detect 2 VPs of shogi board in img.
     VPs are represented as unit 3D vector in camera coordinates.
@@ -138,8 +138,8 @@ def detect_board_vps(photo_id, img, lines, visualize):
     max_inliers = None
     max_fov = None
     for hfov in np.linspace(hfov_min, hfov_max, num=n_hfov_step):
-        focal_px = img.shape[0] / 2 / math.tan(hfov / 2)
-        center = np.array([img.shape[1], img.shape[0]]) / 2
+        focal_px = img_shape[0] / 2 / math.tan(hfov / 2)
+        center = np.array([img_shape[1], img_shape[0]]) / 2
         lines_normals = []
         for line in lines:
             l_org, l_dir = rhotheta_to_cartesian(*line)
@@ -199,12 +199,12 @@ def detect_board_vps(photo_id, img, lines, visualize):
                 max_inliers = (inl0, inl1)
                 max_fov = hfov
     print("Max: fov=%.1f #inl=%d axis=%s" % (max_fov, max_n_inliers, max_ns))
-    if visualize:
-        img_vps = np.copy(img)
-        for (ix, color) in [(0, (0, 0, 255)), (1, (0, 255, 0))]:
-            for line in max_inliers[ix]:
-                draw_rhotheta_line(img_vps, line, color)
-        cv2.imwrite('debug/proc-%s-vps.png' % photo_id, img_vps)
+    # if visualize:
+    #     img_vps = np.copy(img)
+    #     for (ix, color) in [(0, (0, 0, 255)), (1, (0, 255, 0))]:
+    #         for line in max_inliers[ix]:
+    #             draw_rhotheta_line(img_vps, line, color)
+    #     cv2.imwrite('debug/proc-%s-vps.png' % photo_id, img_vps)
     return (max_fov, max_ns)
 
 
@@ -271,13 +271,12 @@ def visualize_1d(arr, normalize=True, height=50):
     return cv2.resize(img, (width, height))
 
 
-def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
+def detect_board_grid(photo_id, img, img_gray, region, visualize):
     """
     Detect shogi board pattern in lines.
 
     * img: size reference and background for visualization
-    * lines: strong lines which is used to initialize VPs
-    * lines_weak: lines used to guess final board. must contain all grid lines
+    * region: 4 corners
 
     Use "3-line RANSAC" with variable hfov.
     (it operates on surface of a sphere)
@@ -286,62 +285,16 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
 
     return (xs, ys) | None
     """
-    hfov, vps = detect_board_vps(photo_id, img, lines, visualize)
-    # Convert weak lines to normals of great circles.
-    focal_px = img.shape[0] / 2 / math.tan(hfov / 2)
-    center = np.array([img.shape[1], img.shape[0]]) / 2
-    lines_weak_normals = []
-    for line in lines_weak:
-        l_org, l_dir = rhotheta_to_cartesian(*line)
-        p0 = point_to_direction(focal_px, center, l_org - l_dir * 100)
-        p1 = point_to_direction(focal_px, center, l_org + l_dir * 100)
-        n = np.cross(p0, p1)
-        n /= la.norm(n)
-        lines_weak_normals.append(n)
-    # Classify
-    vp0, vp1 = vps
-    inliers0 = []
-    inliers1 = []
-    dist_thresh = 0.01
-    for (lorg, ln) in zip(lines_weak, lines_weak_normals):
-        dist0 = abs(math.asin(np.dot(ln, vp0)))
-        dist1 = abs(math.asin(np.dot(ln, vp1)))
-        if dist0 < dist_thresh and dist1 < dist_thresh:
-            continue
-        if dist0 < dist_thresh:
-            inliers0.append(lorg)
-        if dist1 < dist_thresh:
-            inliers1.append(lorg)
-    if visualize:
-        img_vps = np.copy(img)
-        for (inliers, color) in [(inliers0, (0, 0, 255)), (inliers1, (0, 255, 0))]:
-            for line in inliers:
-                draw_rhotheta_line(img_vps, line, color)
-        cv2.imwrite('debug/proc-%s-vps-weak.png' % photo_id, img_vps)
-    # Any pairs of X and Y lines will form a rectangle.
-    # (Unless they're really small)
-    #      ly0   ly1  (orders vary)
-    # lx0   -------
-    #       |      |
-    # lx1   -------
-    dir0 = rhotheta_to_cartesian(*inliers0[0])[1]
-    dir1 = rhotheta_to_cartesian(*inliers1[0])[1]
-    if abs(np.dot(dir0, dir1)) > 0.5:
-        print('Angle too far from orthogonal')
-        return None
+    assert(len(region) == 4)
     depersp_size = 900
     margin = 5
-    inliers0.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir1))
-    inliers1.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir0))
-    lxs = [inliers0[0], inliers0[-1]]
-    lys = [inliers1[0], inliers1[-1]]
-    pts_photo = []
+    pts_photo = region
     pts_correct = []
     for (ix, iy) in [(0, 0), (0, 1), (1, 1), (1, 0)]:
-        pts_photo.append(intersect_lines(lxs[ix], lys[iy]))
         pts_correct.append(np.array([
             margin + ix * (depersp_size - 2 * margin),
             margin + iy * (depersp_size - 2 * margin)]))
+
     trans_persp = cv2.getPerspectiveTransform(
         np.array(pts_photo).astype(np.float32), np.array(pts_correct).astype(np.float32))
     # Correct perspectiveness.
@@ -438,16 +391,7 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
     #print("Prob grid(FFT): dx:%f" % p_dx_f)
 
     def get_phase(vs, delta):
-        ps = [v % delta for v in vs]
-        #m = np.mean(ps)
-        return np.median(ps)
-        if visualize and False:
-            plt.figure(photo_id + "p")
-            plt.hist(ps, bins=100)
-            plt.axvline(m)
-            plt.axvline(med, c='red')
-            plt.savefig('debug/hist-dx-phase-%s.png' % photo_id)
-        return med
+        return np.median([v % delta for v in vs])
 
     ph_x = get_phase(xs, p_dx)
     ph_y = get_phase(ys, p_dy)
@@ -455,14 +399,6 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
 
     grid_desc = ((p_dx, ph_x), (p_dy, ph_y))
 
-    # xs = find_9segments(xs, (min_dx, max_dx))
-    # ys = find_9segments(ys, (min_dx, max_dx))
-    # print("Lattice candidates: %dx%d" % (len(xs), len(ys)))
-    # if len(xs) == 0 or len(ys) == 0:
-    #     print("WARN: Couldn't find grid for X or Y")
-    #     return None
-    # xs = xs[0]
-    # ys = ys[0]
     if visualize:
         img_debug = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR)
         for ix in range(20):
@@ -474,11 +410,6 @@ def detect_board_pattern(photo_id, img, lines, lines_weak, visualize):
         cv2.imwrite('debug/proc-%s-grid.png' % photo_id, img_debug)
 
     return (img_depersp, grid_desc)
-
-    # if len(xs) == 10 and len(ys) == 10:
-    #     return (img_depersp, xs, ys)
-    # else:
-    #     return None
 
 
 def detect_lines(img_bin, num_lines_target, n_iterations=5):
@@ -577,6 +508,78 @@ def to_cairo_surface(img):
         arr, cairo.FORMAT_RGB24, w, h)
 
 
+def detect_board_region(photo_id, img, img_gray, visualize=False, derive=None):
+    """
+    Detect quad region larger than (and parallel to) actual grid.
+    return: 4-corners in image space, CCW or None
+    """
+    img_bin = cv2.adaptiveThreshold(
+        img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 5)
+    if visualize:
+        cv2.imwrite('debug/proc-%s-binary.png' % photo_id, img_bin)
+    # Detect lines. None or [[(rho,theta)]]
+    lines = detect_lines(img_bin, 30, 10)
+    lines_weak = detect_lines(img_bin, 1000)
+    if visualize:
+        img_gray_w_lines = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR) * 0
+        for line in lines:
+            draw_rhotheta_line(img_gray_w_lines, line, (0, 0, 255))
+        cv2.imwrite('debug/proc-%s-raw-lines.png' % photo_id, img_gray_w_lines)
+    # Detect vanishing points
+    hfov, vps = detect_board_vps(photo_id, img_gray.shape, lines, visualize)
+    # Convert weak lines to normals of great circles.
+    focal_px = img_gray.shape[0] / 2 / math.tan(hfov / 2)
+    center = np.array([img_gray.shape[1], img_gray.shape[0]]) / 2
+    lines_weak_normals = []
+    for line in lines_weak:
+        l_org, l_dir = rhotheta_to_cartesian(*line)
+        p0 = point_to_direction(focal_px, center, l_org - l_dir * 100)
+        p1 = point_to_direction(focal_px, center, l_org + l_dir * 100)
+        n = np.cross(p0, p1)
+        n /= la.norm(n)
+        lines_weak_normals.append(n)
+    # Classify
+    vp0, vp1 = vps
+    inliers0 = []
+    inliers1 = []
+    dist_thresh = 0.01
+    for (lorg, ln) in zip(lines_weak, lines_weak_normals):
+        dist0 = abs(math.asin(np.dot(ln, vp0)))
+        dist1 = abs(math.asin(np.dot(ln, vp1)))
+        if dist0 < dist_thresh and dist1 < dist_thresh:
+            continue
+        if dist0 < dist_thresh:
+            inliers0.append(lorg)
+        if dist1 < dist_thresh:
+            inliers1.append(lorg)
+    if visualize:
+        img_vps = np.copy(img)
+        for (inliers, color) in [(inliers0, (0, 0, 255)), (inliers1, (0, 255, 0))]:
+            for line in inliers:
+                draw_rhotheta_line(img_vps, line, color)
+        cv2.imwrite('debug/proc-%s-vps-weak.png' % photo_id, img_vps)
+    # Any pairs of X and Y lines will form a rectangle.
+    # (Unless they're really small)
+    #      ly0   ly1  (orders vary)
+    # lx0   -------
+    #       |      |
+    # lx1   -------
+    dir0 = rhotheta_to_cartesian(*inliers0[0])[1]
+    dir1 = rhotheta_to_cartesian(*inliers1[0])[1]
+    if abs(np.dot(dir0, dir1)) > 0.5:
+        print('Angle too far from orthogonal')
+        return None
+    margin = 5
+    inliers0.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir1))
+    inliers1.sort(key=lambda x: np.dot(rhotheta_to_cartesian(*x)[0], dir0))
+    lxs = [inliers0[0], inliers0[-1]]
+    lys = [inliers1[0], inliers1[-1]]
+    pts_photo = []
+    for (ix, iy) in [(0, 0), (0, 1), (1, 1), (1, 0)]:
+        pts_photo.append(intersect_lines(lxs[ix], lys[iy]))
+    return pts_photo
+
+
 def detect_board(photo_id, img, visualize=False, derive=None):
     """
     * photo_id: str
@@ -598,20 +601,11 @@ def detect_board(photo_id, img, visualize=False, derive=None):
     # Be generous with noise though, because if grid is faint and
     # gone here, it will be impossible to detect grid in later steps.
     img_gray = cv2.cvtColor(img, cv.CV_BGR2GRAY)
-    img_bin = cv2.adaptiveThreshold(
-        img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 5)
-    if visualize:
-        cv2.imwrite('debug/proc-%s-binary.png' % photo_id, img_bin)
-    # Detect lines. None or [[(rho,theta)]]
-    lines = detect_lines(img_bin, 30, 10)
-    lines_weak = detect_lines(img_bin, 1000)
-    if visualize:
-        img_gray_w_lines = cv2.cvtColor(img_gray, cv.CV_GRAY2BGR) * 0
-        for line in lines:
-            draw_rhotheta_line(img_gray_w_lines, line, (0, 0, 255))
-        cv2.imwrite('debug/proc-%s-raw-lines.png' % photo_id, img_gray_w_lines)
+    region = detect_board_region(photo_id, img, img_gray, visualize, derive)
+    if region is None:
+        return None
 
-    grid_pattern = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
+    grid_pattern = detect_board_grid(photo_id, img, img_gray, region, visualize)
     if grid_pattern is None:
         return None
 
