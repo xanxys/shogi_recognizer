@@ -45,8 +45,12 @@ File extensions will be lowercased.""",
                 n += 1
 
     for path in os.listdir(args.new[0]):
-        entry_id = issue_new_id()
         path_src = os.path.join(args.new[0], path)
+        if not os.path.isfile(path_src):
+            print('Ignoring %s (not file)' % path_src)
+            continue
+
+        entry_id = issue_new_id()
         path_dst = os.path.join(args.existing[0], entry_id + os.path.splitext(path)[1].lower())
         print('Copying from %s to %s' % (path_src, path_dst))
         if args.iamsure:
