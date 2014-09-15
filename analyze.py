@@ -80,7 +80,8 @@ class BoardAnalyzer(object):
         derive.derive_types_up = False
         derive.derive_validness = False
         det = preprocess.detect_board("", image, visualize=False, derive=derive)
-        if det:
+        if det is not None:
+            print(det["corners"])
             return RecognizedBoard()
         else:
             return None

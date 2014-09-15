@@ -613,7 +613,7 @@ def detect_board(photo_id, img, visualize=False, derive=None):
 
     grid_pattern = detect_board_pattern(photo_id, img, lines, lines_weak, visualize)
     if grid_pattern is None:
-        return False
+        return None
 
     # Extract patches
     depersp_img, gp = grid_pattern
@@ -632,7 +632,7 @@ def detect_board(photo_id, img, visualize=False, derive=None):
     # Extract best range
     if len(xs) < 10 or len(ys) < 10:
         print("%s: not enough cells" % photo_id)
-        return False
+        return None
 
     patches_raw = extract_patches_raw(depersp_img, xs, ys)
     probs_raw = {}
@@ -696,10 +696,11 @@ def detect_board(photo_id, img, visualize=False, derive=None):
     print("Patch Validness pid=%s p=%f" % (photo_id, p_valid_grid))
     if p_valid_grid < 0.75:
         print("WARN: rejecting due to low validness score")
-        return False
+        return None
 
     # Extract patches
-    patches = extract_patches(depersp_img,
+    patches = extract_patches(
+        depersp_img,
         xs[best_offset[0] : best_offset[0] + 10],
         ys[best_offset[1] : best_offset[1] + 10])
 
@@ -711,7 +712,18 @@ def detect_board(photo_id, img, visualize=False, derive=None):
         if derive.derive_validness:
             derive_validness_samples(photo_id, patches, grid_pattern)
 
-    return True
+    corners_depersp = [
+        (xs[best_offset[0]], ys[best_offset[1]]),
+        (xs[best_offset[0]], ys[best_offset[1]]),
+        (xs[best_offset[0]], ys[best_offset[1]]),
+        (xs[best_offset[0]], ys[best_offset[1]])
+    ]
+
+    # TODO: transform back to image space
+    # we need original perspective transform here!
+    return {
+        "corners": corners_depersp
+    }
 
 
 def rotate_patches_90deg(patches):
@@ -864,16 +876,16 @@ def process_image(packed_args):
         img = cv2.imread(img_path)
         print('processing %s: id=%s shape=%s' % (img_path, photo_id, img.shape))
         detected = detect_board(str(photo_id), img, visualize=args.debug, derive=args)
-        if not detected:
-            return {
-                "loaded": 1
-            }
-            print('->failed')
-        else:
+        if detected is not None:
             return {
                 "loaded": 1,
                 "success": 1
             }
+        else:
+            return {
+                "loaded": 1
+            }
+            print('->failed')
     except:
         traceback.print_exc()
         return {
