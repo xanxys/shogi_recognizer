@@ -402,13 +402,16 @@ def load_up_dataset(classifier):
     samples = []
     categories = []
     table = classifier.get_label_to_category()
-    print(table)
     dir_path = 'derived/cells-types-up'
+    ptype_count = {ty: 0 for (ty, _) in table.items()}
     for path in os.listdir(dir_path):
         photo_id, org_pos, ptype = os.path.splitext(path)[0].split('-')
         img_cell = cv2.imread(os.path.join(dir_path, path))
         samples.append(preprocess_cell_image(img_cell))
         categories.append(table[ptype])
+        ptype_count[ptype] += 1
+    print("Samples for each categories")
+    print(ptype_count)
 
     # shuffle data
     samples = np.array(samples)
