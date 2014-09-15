@@ -1,6 +1,8 @@
-dataset/
+dataset.sqlite
 debug/
-derived/
 *.sublime-*
-
 *.pyc
+
+# deprecated
+dataset/
+derived/
