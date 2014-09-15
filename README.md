@@ -42,6 +42,7 @@ in the image (touching edge is ok).
 
 Programs
 ----------
+* `analyze.py`: Analyze given photo (from CLI or python interface)
 * `issue_id.py`: Merge files into a directory, assigning nice (safe, unique, short) keys
 * `preprocess.py`: Extract cell images from raw photos
 * `classify.py`: Train / use cell image classifier
