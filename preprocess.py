@@ -283,7 +283,7 @@ def detect_board_grid(photo_id, img, img_gray, region, visualize):
 
     The center of img must be forward direction (i.e. img must not be cropped)
 
-    return (xs, ys) | None
+    return (orthogonal_image, grid_desc, perspective_trans)
     """
     assert(len(region) == 4)
     depersp_size = 900
@@ -409,7 +409,7 @@ def detect_board_grid(photo_id, img, img_gray, region, visualize):
             cv2.line(img_debug, (0, y), (1000, y), (0, 255, 0), thickness=3)
         cv2.imwrite('debug/proc-%s-grid.png' % photo_id, img_debug)
 
-    return (img_depersp, grid_desc)
+    return (img_depersp, grid_desc, trans_persp)
 
 
 def detect_lines(img_bin, num_lines_target, n_iterations=5):
@@ -595,8 +595,12 @@ def detect_board(photo_id, img, visualize=False, derive=None):
     max_height = 1000
     if img.shape[0] > max_height:
         height, width = img.shape[:2]
-        new_size = (int(width * max_height / height), max_height)
+        resize_factor = max_height / height
+        new_size = (int(width * resize_factor), max_height)
         img = cv2.resize(img, new_size)
+    else:
+        resize_factor = 1.0
+
     # Apply threshold to try to keep only grids
     # Be generous with noise though, because if grid is faint and
     # gone here, it will be impossible to detect grid in later steps.
@@ -610,7 +614,7 @@ def detect_board(photo_id, img, visualize=False, derive=None):
         return None
 
     # Extract patches
-    depersp_img, gp = grid_pattern
+    depersp_img, gp, persp_trans = grid_pattern
     depersp_size = depersp_img.shape[0]
 
     def fp_to_vs(dv, pv):
@@ -706,17 +710,21 @@ def detect_board(photo_id, img, visualize=False, derive=None):
         if derive.derive_validness:
             derive_validness_samples(photo_id, patches, grid_pattern)
 
-    corners_depersp = [
+    corners_depersp = np.array([
         (xs[best_offset[0]], ys[best_offset[1]]),
-        (xs[best_offset[0]], ys[best_offset[1]]),
-        (xs[best_offset[0]], ys[best_offset[1]]),
-        (xs[best_offset[0]], ys[best_offset[1]])
-    ]
+        (xs[best_offset[0]], ys[best_offset[1] + 9]),
+        (xs[best_offset[0] + 9], ys[best_offset[1] + 9]),
+        (xs[best_offset[0] + 9], ys[best_offset[1]])
+    ])
+
+    corners_org_small = cv2.perspectiveTransform(
+        np.array([corners_depersp]), la.inv(persp_trans))[0]
+    corners_org = corners_org_small / resize_factor
 
     # TODO: transform back to image space
     # we need original perspective transform here!
     return {
-        "corners": corners_depersp
+        "corners": corners_org
     }
 
 
