@@ -15,7 +15,7 @@ def before_request():
 
 
 @app.route("/")
-def hello():
+def index():
     counts = {}
     counts["all"] = flask.g.db.execute('select count(*) from photos').fetchone()[0]
     counts["definitely_initial"] = flask.g.db.execute('select count(*) from photos where initial and initial_truth').fetchone()[0]
