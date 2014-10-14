@@ -1,6 +1,7 @@
 #!/bin/python2
 from __future__ import print_function, division
 import argparse
+import base64
 import flask
 import sqlite3
 
@@ -19,9 +20,26 @@ def hello():
     counts["all"] = flask.g.db.execute('select count(*) from photos').fetchone()[0]
     counts["definitely_initial"] = flask.g.db.execute('select count(*) from photos where initial and initial_truth').fetchone()[0]
 
-    result = "photos<br/>"
+    result = ""
+    result += "<h1>Stats</h1>"
     for (key, n) in counts.items():
         result += '* %s: %d photos<br/>' % (key, n)
+
+    result += "<h1>Photos</h1>"
+    entries_per_page = 100
+    for (i, row) in enumerate(flask.g.db.execute('select id, image from photos')):
+        if i >= entries_per_page:
+            result += "...and more"
+            break
+        pid, image = row
+
+        image_data = "data:image/jpeg;base64,%s" % base64.b64encode(image)
+        result += "<div>"
+        result += "id=%d<br/>" % pid
+        result += '<img src="%s"/>' % image_data
+        result += "(%d byte)" % len(image)
+        result += "</div>"
+
     return result
 
 
@@ -36,4 +54,4 @@ Launch a web interface to view / annotate datasets.""",
 
     args = parser.parse_args()
     app.db_conn = args.dataset[0]
-    app.run(port=8374)
+    app.run(port=8374, debug=True)
