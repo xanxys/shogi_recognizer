@@ -4,8 +4,9 @@ import argparse
 import base64
 import flask
 import sqlite3
+import os.path
 
-app = flask.Flask(__name__)
+app = flask.Flask(__name__, template_folder='annotator/template')
 
 
 @app.before_request
@@ -20,27 +21,36 @@ def index():
     counts["all"] = flask.g.db.execute('select count(*) from photos').fetchone()[0]
     counts["definitely_initial"] = flask.g.db.execute('select count(*) from photos where initial and initial_truth').fetchone()[0]
 
-    result = ""
-    result += "<h1>Stats</h1>"
+    result = []
     for (key, n) in counts.items():
-        result += '* %s: %d photos<br/>' % (key, n)
+        result.append('* %s: %d photos<br/>' % (key, n))
+    stats_html = flask.Markup(''.join(result))
 
-    result += "<h1>Photos</h1>"
-    entries_per_page = 100
-    for (i, row) in enumerate(flask.g.db.execute('select id, image from photos')):
+    result = []
+    entries_per_page = 5
+    for (i, (pid, image, corners, corners_truth, initial, initial_truth)) in enumerate(
+            flask.g.db.execute('select id, image, corners, corners_truth, initial, initial_truth from photos')):
         if i >= entries_per_page:
             result += "...and more"
             break
-        pid, image = row
-
         image_data = "data:image/jpeg;base64,%s" % base64.b64encode(image)
-        result += "<div>"
-        result += "id=%d<br/>" % pid
-        result += '<img src="%s"/>' % image_data
-        result += "(%d byte)" % len(image)
-        result += "</div>"
+        result.append("<div>")
+        result.append("id=%d<br/>" % pid)
+        result.append('<img src="%s"/>' % image_data)
+        result.append("(%d byte)" % len(image))
+        result.append(corners)
+        result.append("</div>")
+    photos_html = flask.Markup(''.join(result))
 
-    return result
+    return flask.render_template(
+        "index.html",
+        stats_html=stats_html,
+        photos_html=photos_html)
+
+
+@app.route('/static/<path>')
+def serve_static(path):
+    return flask.send_from_directory('./annotator/static', path)
 
 
 if __name__ == "__main__":
