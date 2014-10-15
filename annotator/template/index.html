@@ -2,6 +2,8 @@
 <html>
   <head>
     <title>Shogi Recognizer Dataset Annotator</title>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore.js"></script>
   </head>
   <body>
     <h1>Stats</h1>
@@ -11,7 +13,15 @@
     {{photos_html}}
 
     <h1>Annotator</h1>
-    
+    <div>
+        <button id="btn_prev">Prev</button>
+        <button id="btn_next">Next</button>
+    </div>
+    <canvas id="editor_main"></canvas>
+
+    <script>
+    var metadata = {{metadata}};
+    </script>
     <script src="/static/annotation.js"></script>
   </body>
 </html>

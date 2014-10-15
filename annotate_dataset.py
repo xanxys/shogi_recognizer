@@ -2,9 +2,9 @@
 from __future__ import print_function, division
 import argparse
 import base64
+import json
 import flask
 import sqlite3
-import os.path
 
 app = flask.Flask(__name__, template_folder='annotator/template')
 
@@ -27,12 +27,14 @@ def index():
     stats_html = flask.Markup(''.join(result))
 
     result = []
-    entries_per_page = 5
+    metadata = {}
+    entries_per_page = 10
     for (i, (pid, image, corners, corners_truth, initial, initial_truth)) in enumerate(
             flask.g.db.execute('select id, image, corners, corners_truth, initial, initial_truth from photos')):
         if i >= entries_per_page:
             result += "...and more"
             break
+        metadata[i] = corners
         image_data = "data:image/jpeg;base64,%s" % base64.b64encode(image)
         result.append("<div>")
         result.append("id=%d<br/>" % pid)
@@ -45,7 +47,8 @@ def index():
     return flask.render_template(
         "index.html",
         stats_html=stats_html,
-        photos_html=photos_html)
+        photos_html=photos_html,
+        metadata=flask.Markup(json.dumps(metadata)))
 
 
 @app.route('/static/<path>')
