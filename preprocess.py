@@ -14,6 +14,7 @@ import traceback
 import itertools
 import classify
 import cairo
+import sqlite3
 import lsd
 
 
@@ -868,15 +869,17 @@ def derive_empty_vs_nonempty_samples(photo_id, patches):
 
 
 def process_image(packed_args):
-    photo_id, img_path, args = packed_args
-    print(img_path)
+    db_path, photo_id, args = packed_args
+    print(db_path, photo_id)
     if args.debug:
         print('WARN: using fixed seed 0 for debugging')
         random.seed(0)
 
     try:
-        img = cv2.imread(img_path)
-        print('processing %s: id=%s shape=%s' % (img_path, photo_id, img.shape))
+        with sqlite3.connect(db_path) as conn:
+            image_blob = conn.execute('select image from photos where id = ?', (photo_id,)).fetchone()[0]
+            img = cv2.imdecode(np.fromstring(image_blob, np.uint8), cv.CV_LOAD_IMAGE_COLOR)
+        print('processing: id=%s shape=%s' % (photo_id, img.shape))
         detected = detect_board(str(photo_id), img, visualize=args.debug, derive=args)
         if detected is not None:
             return {
@@ -902,7 +905,7 @@ Extract 9x9 cells from photos of shogi board.""",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         'dataset', metavar='DATASET', nargs=1, type=str,
-        help='Dataset directory path')
+        help='Dataset sqlite path')
     parser.add_argument(
         '-j', nargs='?', metavar='NUM_PROC', type=int, default=1, const=True,
         help='Number of parallel processes')
@@ -933,14 +936,16 @@ Extract 9x9 cells from photos of shogi board.""",
 
     pid_blacklist = set(args.blacklist)
 
-    dir_path = args.dataset[0]
+    db_path = args.dataset[0]
+    conn = sqlite3.connect(db_path)
+    pids = [row[0] for row in conn.execute('select id from photos').fetchall()]
+
     pool = multiprocessing.Pool(args.j)
     ls = []
-    for p in os.listdir(dir_path):
-        pid = os.path.splitext(p)[0]
+    for pid in pids:
         if pid in pid_blacklist:
             continue
-        ls.append((pid, os.path.join(dir_path, p), args))
+        ls.append((db_path, pid, args))
     # HACK: receive keyboard interrupt correctly
     # https://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
     results = pool.map_async(process_image, ls).get(1000)
