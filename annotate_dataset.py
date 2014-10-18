@@ -27,19 +27,12 @@ def index():
     stats_html = flask.Markup(''.join(result))
 
     result = []
-    metadata = {}
     entries_per_page = 10
     for (i, (pid, image, corners, corners_truth, initial, initial_truth)) in enumerate(
             flask.g.db.execute('select id, image, corners, corners_truth, initial, initial_truth from photos')):
         if i >= entries_per_page:
             result += "...and more"
             break
-        metadata[i] = {
-            "corners": json.loads(corners),
-            "corners_truth": corners_truth,
-            "initial": initial,
-            "initial_truth": initial_truth
-        }
         image_data = "data:image/jpeg;base64,%s" % base64.b64encode(image)
         result.append("<div>")
         result.append("id=%d<br/>" % pid)
@@ -52,8 +45,45 @@ def index():
     return flask.render_template(
         "index.html",
         stats_html=stats_html,
-        photos_html=photos_html,
-        metadata=flask.Markup(json.dumps(metadata)))
+        photos_html=photos_html)
+
+
+@app.route("/photos")
+def photos():
+    """
+    Don't return images.
+    """
+    results = []
+    for (pid, corners, corners_truth, initial, initial_truth) in flask.g.db.execute(
+            'select id, corners, corners_truth, initial, initial_truth from photos'):
+        results.append({
+            "id": pid,
+            "corners": json.loads(corners),
+            "corners_truth": corners_truth,
+            "initial": initial,
+            "initial_truth": initial_truth
+        })
+    return flask.jsonify(results=results)
+
+
+@app.route("/photo/<int:photo_id>")
+def photo(photo_id):
+    entry = flask.g.db.execute(
+        'select image, corners, corners_truth, initial, initial_truth from photos where id = ?',
+        (photo_id,)).fetchone()
+    if entry is None:
+        flask.abort(404)
+    image, corners, corners_truth, initial, initial_truth = entry
+    image_data = "data:image/jpeg;base64,%s" % base64.b64encode(image)
+    data = {
+        "id": photo_id,
+        "image_uri_encoded": image_data,
+        "corners": json.loads(corners),
+        "corners_truth": corners_truth,
+        "initial": initial,
+        "initial_truth": initial_truth
+    }
+    return flask.jsonify(**data)
 
 
 @app.route('/static/<path>')

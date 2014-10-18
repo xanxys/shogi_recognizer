@@ -2,7 +2,7 @@
 var Editor = function(i) {
 	var std_width = 600;
 
-	var e = $('#editor_main')[0];
+	var e = $('#the_editor > .editor_main')[0];
 
 	// Basic, immutable settings.
 	this.img_width = i.width;
@@ -31,7 +31,8 @@ Editor.prototype.redraw = function() {
 	ctx.drawImage(this.image, 0, 0);
 
 	// update info
-	$('#editor_info').text(JSON.stringify(this.model, null, 2));
+	var info = _.omit(this.model, 'image_uri_encoded');
+	$('#the_editor > .editor_info').text(JSON.stringify(info, null, 2));
 
 	// draw grid region
 	ctx.beginPath();
@@ -53,23 +54,30 @@ Editor.prototype.redraw = function() {
 };
 
 
-var curr_ix = 0;
-var editor = null;
+$.ajax('/photos').done(function(resp) {
+	var metadata = resp.results;
+	var curr_ix = 0;
+	var editor = null;
 
-function recreate_editor_from_current_index() {
-	editor = new Editor($('img')[curr_ix]);
-	editor.model = metadata['' + curr_ix];
-	editor.redraw();
-}
+	function recreate_editor_from_current_index() {
+		$.ajax('/photo/' + metadata[curr_ix].id).done(function(resp) {
+			var img = new Image();
+			img.src = resp.image_uri_encoded;
+			editor = new Editor(img);
+			editor.model = resp;
+			editor.redraw();
+		});
+	}
 
-$('#btn_prev').click(function() {
-	curr_ix = Math.max(0, curr_ix - 1);
+	$('#btn_prev').click(function() {
+		curr_ix = Math.max(0, curr_ix - 1);
+		recreate_editor_from_current_index();
+	});
+
+	$('#btn_next').click(function() {
+		curr_ix = Math.min(metadata.length - 1, curr_ix + 1);
+		recreate_editor_from_current_index();
+	});
+
 	recreate_editor_from_current_index();
 });
-
-$('#btn_next').click(function() {
-	curr_ix = Math.min($('img').length - 1, curr_ix + 1);
-	recreate_editor_from_current_index();
-});
-
-recreate_editor_from_current_index();

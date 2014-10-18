@@ -14,15 +14,16 @@
         <button id="btn_prev">Prev</button>
         <button id="btn_next">Next</button>
     </div>
-    <canvas id="editor_main"></canvas>
-    <pre id="editor_info"></pre>
+
+    <div id="the_editor">
+        <canvas class="editor_main"></canvas>
+        <pre class="editor_info"></pre>
+        <button class="btn_update">Update</button>
+    </div>
 
     <h1>Photos</h1>
     {{photos_html}}
 
-    <script>
-    var metadata = {{metadata}};
-    </script>
     <script src="/static/annotation.js"></script>
   </body>
 </html>
