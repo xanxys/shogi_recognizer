@@ -105,6 +105,10 @@ $.ajax('/photos').done(function(resp) {
 	var curr_ix = 0;
 	var editor = null;
 
+	function update_nav_status() {
+		$('#nav_status').text((curr_ix + 1) + ' / ' + metadata.length);
+	}
+
 	function recreate_editor_from_current_index() {
 		$.ajax('/photo/' + metadata[curr_ix].id).done(function(resp) {
 			var img = new Image();
@@ -117,13 +121,34 @@ $.ajax('/photos').done(function(resp) {
 
 	$('#btn_prev').click(function() {
 		curr_ix = Math.max(0, curr_ix - 1);
+		update_nav_status();
 		recreate_editor_from_current_index();
 	});
 
 	$('#btn_next').click(function() {
 		curr_ix = Math.min(metadata.length - 1, curr_ix + 1);
+		update_nav_status();
 		recreate_editor_from_current_index();
 	});
 
+	$('#btn_all').click(function() {
+		$.ajax('/photos').done(function(resp) {
+			metadata = resp.results;
+			curr_ix = 0;
+			update_nav_status();
+			recreate_editor_from_current_index();
+		});
+	});
+
+	$('#btn_uncertain_corners').click(function() {
+		$.ajax('/photos?uncertain_corners').done(function(resp) {
+			metadata = resp.results;
+			curr_ix = 0;
+			update_nav_status();
+			recreate_editor_from_current_index();
+		});
+	});
+
+	update_nav_status();
 	recreate_editor_from_current_index();
 });

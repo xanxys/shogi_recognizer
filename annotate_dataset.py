@@ -20,6 +20,7 @@ def index():
     counts = {}
     counts["all"] = flask.g.db.execute('select count(*) from photos').fetchone()[0]
     counts["definitely_initial"] = flask.g.db.execute('select count(*) from photos where initial and initial_truth').fetchone()[0]
+    counts["corners_is_truth"] = flask.g.db.execute('select count(*) from photos where corners_truth').fetchone()[0]
 
     result = []
     for (key, n) in counts.items():
@@ -51,11 +52,15 @@ def index():
 @app.route("/photos")
 def photos():
     """
-    Don't return images.
+    Don't return images themselves.
     """
+    filter_unc_corners = flask.request.args.get('uncertain_corners') is not None
+
     results = []
     for (pid, corners, corners_truth, initial, initial_truth) in flask.g.db.execute(
             'select id, corners, corners_truth, initial, initial_truth from photos'):
+        if filter_unc_corners and corners_truth:
+            continue
         results.append({
             "id": pid,
             "corners": json.loads(corners),
