@@ -9,15 +9,16 @@
     <h1>Stats</h1>
     {{stats_html}}
 
-    <h1>Photos</h1>
-    {{photos_html}}
-
     <h1>Annotator</h1>
     <div>
         <button id="btn_prev">Prev</button>
         <button id="btn_next">Next</button>
     </div>
     <canvas id="editor_main"></canvas>
+    <pre id="editor_info"></pre>
+
+    <h1>Photos</h1>
+    {{photos_html}}
 
     <script>
     var metadata = {{metadata}};

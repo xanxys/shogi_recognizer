@@ -10,19 +10,22 @@ var Editor = function(i) {
 	this.height = i.height;
 	this.image = i;
 
-	// Variables that editor modifies. ("model")
-	this.corners = [];
+	// Variables that editor modifies.
+	this.model = [];
 };
 
 Editor.prototype.redraw = function() {
 	var ctx = this.ctx;
 	ctx.drawImage(this.image, 0, 0);
 
+	// update info
+	$('#editor_info').text(JSON.stringify(this.model, null, 2));
+
 	// draw grid region
 	ctx.beginPath();
 	ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
 	ctx.lineWidth = 2;
-	_.each(this.corners, function(corner, i) {
+	_.each(this.model["corners"], function(corner, i) {
 		ctx.lineTo(corner[0], corner[1]);
 	});
 	ctx.closePath();
@@ -35,7 +38,7 @@ var editor = null;
 
 function recreate_editor_from_current_index() {
 	editor = new Editor($('img')[curr_ix]);
-	editor.corners = metadata['' + curr_ix];
+	editor.model = metadata['' + curr_ix];
 	editor.redraw();
 }
 
