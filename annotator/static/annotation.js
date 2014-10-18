@@ -1,6 +1,6 @@
 
 var Editor = function(i) {
-	var std_width = 600;
+	var std_width = 700;
 
 	var e = $('#the_editor > .editor_main')[0];
 
