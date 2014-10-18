@@ -16,6 +16,7 @@ import classify
 import cairo
 import sqlite3
 import lsd
+import json
 
 
 def clean_directory(dir_path):
@@ -588,7 +589,7 @@ def detect_board(photo_id, img, visualize=False, derive=None):
     Take color image and detect 9x9 black grid in shogi board
     It's assumed that shogi board occupies large portion of img.
 
-    return: False failure
+    return: None in failure
     """
     assert(len(img.shape) == 3)  # y, x, channel
     assert(img.shape[2] == 3)  # channel == 3
@@ -877,11 +878,27 @@ def process_image(packed_args):
 
     try:
         with sqlite3.connect(db_path) as conn:
-            image_blob = conn.execute('select image from photos where id = ?', (photo_id,)).fetchone()[0]
-            img = cv2.imdecode(np.fromstring(image_blob, np.uint8), cv.CV_LOAD_IMAGE_COLOR)
+            image_blob = conn.execute(
+                'select image from photos where id = ?',
+                (photo_id,)).fetchone()[0]
+            img = cv2.imdecode(
+                np.fromstring(image_blob, np.uint8), cv.CV_LOAD_IMAGE_COLOR)
         print('processing: id=%s shape=%s' % (photo_id, img.shape))
-        detected = detect_board(str(photo_id), img, visualize=args.debug, derive=args)
+        detected = detect_board(
+            str(photo_id), img, visualize=args.debug, derive=args)
         if detected is not None:
+            if args.guess_grid:
+                with sqlite3.connect(db_path) as conn:
+                    corners_truth = conn.execute(
+                        "select corners_truth from photos where id = ?",
+                        (photo_id,)).fetchone()[0]
+                    if not corners_truth:
+                        print("Writing", detected["corners"])
+                        conn.execute(
+                            'update photos set corners=? where id = ?',
+                            (json.dumps(map(list ,detected["corners"])), photo_id))
+                        conn.commit()
+
             return {
                 "loaded": 1,
                 "success": 1
@@ -918,6 +935,9 @@ Extract 9x9 cells from photos of shogi board.""",
     parser.add_argument(
         '--derive-validness', action='store_true',
         help='Derive validness training data')
+    parser.add_argument(
+        '--guess-grid', action='store_true',
+        help='Guess all grid corners not flagged as ground-truth')
     parser.add_argument(
         '--debug', action='store_true',
         help='Dump debug images to ./debug/. Also fix random.seed.')
