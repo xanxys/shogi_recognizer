@@ -896,7 +896,7 @@ def process_image(packed_args):
                         print("Writing", detected["corners"])
                         conn.execute(
                             'update photos set corners=? where id = ?',
-                            (json.dumps(map(list ,detected["corners"])), photo_id))
+                            (json.dumps(map(list, detected["corners"])), photo_id))
                         conn.commit()
 
             return {
