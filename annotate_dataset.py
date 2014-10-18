@@ -34,7 +34,7 @@ def index():
         if i >= entries_per_page:
             result += "...and more"
             break
-        metadata[i] = corners
+        metadata[i] = json.loads(corners)
         image_data = "data:image/jpeg;base64,%s" % base64.b64encode(image)
         result.append("<div>")
         result.append("id=%d<br/>" % pid)
