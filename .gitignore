@@ -4,5 +4,4 @@ debug/
 *.pyc
 
 # deprecated
-dataset/
 derived/
