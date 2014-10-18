@@ -86,6 +86,23 @@ def photo(photo_id):
     return flask.jsonify(**data)
 
 
+@app.route("/photo/<int:photo_id>", methods=["POST"])
+def post_photo(photo_id):
+    raw_corners = flask.request.get_json()
+    # sanitize
+    if len(raw_corners) != 4:
+        flask.abort(403)
+    if any(len(corner) != 2 for corner in raw_corners):
+        flask.abort(403)
+    corners = raw_corners
+
+    # store
+    flask.g.db.execute(
+        'update photos set corners_truth = 1, corners=? where id = ?',
+        (json.dumps(corners), photo_id))
+    flask.g.db.commit()
+    return flask.jsonify(status="success")
+
 @app.route('/static/<path>')
 def serve_static(path):
     return flask.send_from_directory('./annotator/static', path)

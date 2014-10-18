@@ -11,13 +11,48 @@ var Editor = function(i) {
 	this.editor_height = Math.floor(i.height * this.editor_width / i.width);
 	this.image = i;
 
+	// temporary editor state for UI
+	this.corners_in_edit = [];
+
 	// Variables that editor modifies.
 	this.model = [];
+
+	var _this = this;
+	$('#the_editor > .editor_main').unbind('click');
+	$('#the_editor > .editor_main').click(function(ev) {
+		_this.corners_in_edit.push(
+			_this.screen_to_image(
+				[ev.offsetX, ev.offsetY]));
+		// Write to model when completed.
+		if(_this.corners_in_edit.length == 4) {
+			_this.model["corners"] = _this.corners_in_edit;
+			_this.corners_in_edit = [];
+			_this.sync_corners();
+		}
+		_this.redraw();
+	});
 
 	// Set UI size.
 	e.width = this.editor_width;
 	e.height = this.editor_height;
 	this.ctx = e.getContext('2d');
+};
+
+Editor.prototype.sync_corners = function() {
+	// Send this.model["corners"] to server.
+	// (with groudtruth flag=true)
+	$.ajax({
+		type: 'post',
+		url: '/photo/' + this.model.id,
+		data: JSON.stringify(this.model["corners"]),
+		dataType: 'json',
+		contentType: 'application/json'
+	});
+};
+
+Editor.prototype.screen_to_image = function(pt) {
+	var scale_s_to_i = this.img_width / this.editor_width;
+	return [pt[0] * scale_s_to_i, pt[1] * scale_s_to_i];
 };
 
 Editor.prototype.redraw = function() {
@@ -34,23 +69,34 @@ Editor.prototype.redraw = function() {
 	var info = _.omit(this.model, 'image_uri_encoded');
 	$('#the_editor > .editor_info').text(JSON.stringify(info, null, 2));
 
-	// draw grid region
+	// existing quad.
+	this._drawQuad(this.model["corners"], "rgba(255, 0, 0, 0.5)");
+
+	// modifying quad.
+	this._drawQuad(this.corners_in_edit, "rgba(0, 0, 255, 0.5)");
+
+	ctx.restore();
+};
+
+Editor.prototype._drawQuad = function(corners, color) {
+	var ctx = this.ctx;
+
 	ctx.beginPath();
-	ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+	ctx.strokeStyle = color;
 	ctx.lineWidth = 3;
-	_.each(this.model["corners"], function(corner) {
+	_.each(corners, function(corner) {
 		ctx.lineTo(corner[0], corner[1]);
 	});
-	ctx.closePath();
+	if(corners.length == 4) {
+		ctx.closePath();
+	}
 	ctx.stroke();
-	if(this.model["corners"].length > 0) {
-		var pt = this.model["corners"][0];
+	if(corners.length > 0) {
+		var pt = corners[0];
 		ctx.beginPath();
 		ctx.arc(pt[0], pt[1], 5, 0, 2 * Math.PI);
 		ctx.stroke();
 	}
-
-	ctx.restore();
 };
 
 
