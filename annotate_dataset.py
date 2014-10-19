@@ -29,6 +29,7 @@ def index():
     counts["all"] = flask.g.db.execute('select count(*) from photos').fetchone()[0]
     counts["definitely_initial"] = flask.g.db.execute('select count(*) from photos where initial and initial_truth').fetchone()[0]
     counts["corners_is_truth"] = flask.g.db.execute('select count(*) from photos where corners_truth').fetchone()[0]
+    counts["config_is_truth"] = flask.g.db.execute('select count(*) from photos where config_truth').fetchone()[0]
 
     result = []
     for (key, n) in counts.items():
