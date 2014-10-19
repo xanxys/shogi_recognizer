@@ -10,20 +10,18 @@ import sqlite3
 # *_truth: true if it's confirmed by human
 # state: {"empty", "up", "down"}
 # type: {"empty", "FU", ..., "OU"}
+#
+# corners, config: JSON
+#
+# corners: 4 2D points as [[double]]
+# config: {'xy': {state: state, type: type}
 schema_photos = """
 CREATE TABLE photos(
     id integer primary key,
     image blob,
     corners text, corners_truth bool,
-    initial bool, initial_truth bool);
-"""
-
-schema_cells = """
-CREATE TABLE cells(
-    id integer primary key,
-    photo_id integer, i integer, j integer,
-    state text, state_truth bool,
-    type text, type_truth bool);
+    initial bool, initial_truth bool,
+    config text, config_truth bool);
 """
 
 
@@ -69,9 +67,8 @@ File extensions will be lowercased.""",
     already_exist = os.path.isfile(args.existing[0])
     conn = sqlite3.connect(args.existing[0])
     if not already_exist:
-        print('Creating tables')
+        print('Creating table')
         conn.execute(schema_photos)
-        conn.execute(schema_cells)
         conn.commit()
 
     if args.find_duplicate:
@@ -100,14 +97,17 @@ File extensions will be lowercased.""",
                 insert into photos (
                     image,
                     corners, corners_truth,
-                    initial, initial_truth) values (
+                    initial, initial_truth,
+                    config, config_truth) values (
                     ?,
+                    ?, ?,
                     ?, ?,
                     ?, ?) """, (
                 buffer(open(path_src).read()),
                 u"[]", False,
                 False if args.is_initial is None else args.is_initial,
-                False if args.is_initial is None else True))
+                False if args.is_initial is None else True,
+                u"{}", False))
     conn.commit()
 
     print(
