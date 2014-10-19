@@ -121,9 +121,14 @@ Editor.prototype.redraw = function() {
 			state_edit.append($('<option/>').val('down').text('↓'));
 			state_edit.append($('<option/>').val('empty').text('-').attr('selected', 'selected'));
 
+			type_edit.change(function(ev) {
+				_this.model["config"][key]["type"] = ev.target.value;
+			});
 			state_edit.change(function(ev) {
+				_this.model["config"][key]["state"] = ev.target.value;
 				if(ev.target.value === 'empty') {
 					type_edit.val('empty');
+					_this.model["config"][key]["type"] = 'empty';
 				}
 			});
 
