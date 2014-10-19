@@ -38,6 +38,12 @@ var Editor = function(i) {
 		_this.redraw();
 	});
 
+	$('#the_editor > .editor_sync_config').unbind('click');
+	$('#the_editor > .editor_sync_config').click(function() {
+		_this.sync_config();
+		_this.redraw();
+	});
+
 	// Set UI size.
 	e.width = this.editor_width;
 	e.height = this.editor_height;
@@ -50,7 +56,21 @@ Editor.prototype.sync_corners = function() {
 	$.ajax({
 		type: 'post',
 		url: '/photo/' + this.model.id,
-		data: JSON.stringify(this.model["corners"]),
+		data: JSON.stringify({
+			"corners": this.model["corners"],
+		}),
+		dataType: 'json',
+		contentType: 'application/json'
+	});
+};
+
+Editor.prototype.sync_config = function() {
+	$.ajax({
+		type: 'post',
+		url: '/photo/' + this.model.id,
+		data: JSON.stringify({
+			"config": this.model["config"]
+		}),
 		dataType: 'json',
 		contentType: 'application/json'
 	});
@@ -62,31 +82,82 @@ Editor.prototype.screen_to_image = function(pt) {
 };
 
 Editor.prototype.redraw = function() {
-	var ctx = this.ctx;
-	ctx.save();
-	ctx.scale(
+	// Canvas.
+	this.ctx.save();
+	this.ctx.scale(
 		this.editor_width / this.img_width,
 		this.editor_height / this.img_height);
-	// Operate in image-space hereafter.
-
-	ctx.drawImage(this.image, 0, 0);
+	try {
+		this._redraw_canvas_image_space(this.ctx);
+	} catch(e) {
+		console.log(e);
+	}
+	this.ctx.restore();
 
 	// update info
-	var info = _.omit(this.model, 'image_uri_encoded');
+	var info = _.omit(this.model, 'image_uri_encoded', 'corners', 'config');
 	$('#the_editor > .editor_info').text(JSON.stringify(info, null, 2));
 
-	// existing quad.
-	this._drawQuad(this.model["corners"], "rgba(255, 0, 0, 0.5)");
+	// update table.
+	var cell_tables = $('#the_editor > .editor_config');
+	cell_tables.empty();
+	// header
+	var h_row = $('<tr/>');
+	_.each(_.range(9, 0, -1), function(x) {
+		h_row.append($('<th/>').text(x.toString()));
+	});
+	cell_tables.append(h_row);
+	// body
+	var _this = this;
+	_.each(_.range(1, 10), function(y) {
+		var row = $('<tr/>');
+		_.each(_.range(9, 0, -1), function(x) {
+			var key = x.toString() + y.toString();
+			var val = _this.model["config"][key];
 
-	// modifying quad.
-	this._drawQuad(this.corners_in_edit, "rgba(0, 0, 255, 0.5)");
+			var type_edit = $('<input/>').attr('size', 5).val('empty');
+			var state_edit = $('<select/>');
+			state_edit.append($('<option/>').val('up').text('↑'));
+			state_edit.append($('<option/>').val('down').text('↓'));
+			state_edit.append($('<option/>').val('empty').text('-').attr('selected', 'selected'));
 
-	ctx.restore();
+			state_edit.change(function(ev) {
+				if(ev.target.value === 'empty') {
+					type_edit.val('empty');
+				}
+			});
+
+			if(val !== undefined) {
+				type_edit.val(val.type);
+				state_edit.val(val.state);
+			} else {
+				_this.model["config"][key] = {
+					state: "empty",
+					type: "empty"
+				};
+			}
+
+			var cell = $('<td/>');
+			cell.append(type_edit);
+			cell.append($('<br/>'));
+			cell.append(state_edit);
+			row.append(cell);
+		});
+		cell_tables.append(row);
+	});
 };
 
-Editor.prototype._drawQuad = function(corners, color) {
-	var ctx = this.ctx;
+Editor.prototype._redraw_canvas_image_space = function(ctx) {
+	ctx.drawImage(this.image, 0, 0);
 
+	// existing quad.
+	this._drawQuad(ctx, this.model["corners"], "rgba(255, 0, 0, 0.5)");
+
+	// modifying quad.
+	this._drawQuad(ctx, this.corners_in_edit, "rgba(0, 0, 255, 0.5)");
+};
+
+Editor.prototype._drawQuad = function(ctx, corners, color) {
 	ctx.beginPath();
 	ctx.strokeStyle = color;
 	ctx.lineWidth = 3;
