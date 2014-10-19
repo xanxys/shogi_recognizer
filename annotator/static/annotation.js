@@ -32,6 +32,12 @@ var Editor = function(i) {
 		_this.redraw();
 	});
 
+	$('#the_editor > .editor_lgtm').unbind('click');
+	$('#the_editor > .editor_lgtm').click(function() {
+		_this.sync_corners();
+		_this.redraw();
+	});
+
 	// Set UI size.
 	e.width = this.editor_width;
 	e.height = this.editor_height;
