@@ -461,6 +461,48 @@ def extract_patches(ortho_image, xs, ys, margin=0.1, patch_size=80):
     return patches
 
 
+def extract_patches_by_corners(image, corners, margin=0.1, patch_size=80):
+    """
+    Extract 9^2 square patches from normal image and 4 corners in
+    image.
+
+       patch
+    <--------------->
+       |         |
+       |cell    |
+    <->|<------->|<->
+    margin        margin
+    """
+    cell_px = patch_size / (1 + margin * 2)
+    margin_px = int(cell_px * margin)
+    depersp_size = cell_px * 9 + margin_px * 2
+    pts_correct = []
+    for (ix, iy) in [(1, 0), (0, 0), (0, 1), (1, 1)]:
+        pts_correct.append(np.array([
+            margin_px + ix * (depersp_size - 2 * margin_px),
+            margin_px + iy * (depersp_size - 2 * margin_px)]))
+
+    trans_persp = cv2.getPerspectiveTransform(
+        np.array(corners).astype(np.float32),
+        np.array(pts_correct).astype(np.float32))
+    #if la.det(trans_persp) < 0:
+     #   raise RuntimeError("Corners resulted in strange perspective transform")
+
+    img_depersp = cv2.warpPerspective(
+        image, trans_persp, (depersp_size, depersp_size),
+        borderMode=cv2.BORDER_REPLICATE)
+
+    cv2.imwrite('debug/ep-depersp.png', img_depersp)
+
+    patches = {}
+    for ix in range(1, 10):
+        for iy in range(1, 10):
+            x0 = (9 - ix) * cell_px
+            y0 = (iy - 1) * cell_px
+            patches[(ix, iy)] = img_depersp[x0:x0+patch_size, y0:y0+patch_size]
+    return patches
+
+
 def to_cairo_surface(img):
     """
     Convert OpenCV BGR image to cairo.ImageSurface
@@ -474,7 +516,7 @@ def to_cairo_surface(img):
         arr, cairo.FORMAT_RGB24, w, h)
 
 
-def detect_board_region(photo_id, img, img_gray, visualize=False, derive=None):
+def detect_board_region(photo_id, img, img_gray, visualize=False):
     """
     Detect quad region larger than (and parallel to) actual grid.
     return: 4-corners in image space, CCW or None
@@ -546,14 +588,15 @@ def detect_board_region(photo_id, img, img_gray, visualize=False, derive=None):
     return pts_photo
 
 
-def detect_board(photo_id, img, visualize=False, derive=None):
+def detect_board_corners(photo_id, img, visualize=False):
     """
     * photo_id: str
     * img: BGR image
+
     Take color image and detect 9x9 black grid in shogi board
     It's assumed that shogi board occupies large portion of img.
 
-    return: None in failure
+    return: (4 corners of grid in CCW order) or None
     """
     assert(len(img.shape) == 3)  # y, x, channel
     assert(img.shape[2] == 3)  # channel == 3
@@ -571,11 +614,12 @@ def detect_board(photo_id, img, visualize=False, derive=None):
     # Be generous with noise though, because if grid is faint and
     # gone here, it will be impossible to detect grid in later steps.
     img_gray = cv2.cvtColor(img, cv.CV_BGR2GRAY)
-    region = detect_board_region(photo_id, img, img_gray, visualize, derive)
+    region = detect_board_region(photo_id, img, img_gray, visualize)
     if region is None:
         return None
 
-    grid_pattern = detect_board_grid(photo_id, img, img_gray, region, visualize)
+    grid_pattern = detect_board_grid(
+        photo_id, img, img_gray, region, visualize)
     if grid_pattern is None:
         return None
 
@@ -662,11 +706,34 @@ def detect_board(photo_id, img, visualize=False, derive=None):
         print("WARN: rejecting due to low validness score")
         return None
 
+    # Recover corners in the original image space.
+    corners_depersp = np.array([
+        (xs[best_offset[0]], ys[best_offset[1]]),
+        (xs[best_offset[0]], ys[best_offset[1] + 9]),
+        (xs[best_offset[0] + 9], ys[best_offset[1] + 9]),
+        (xs[best_offset[0] + 9], ys[best_offset[1]])
+    ])
+    corners_org_small = cv2.perspectiveTransform(
+        np.array([corners_depersp]), la.inv(persp_trans))[0]
+    corners_org = corners_org_small / resize_factor
+    return corners_org
+
+
+def detect_board(photo_id, img, visualize=False, derive=None):
+    """
+    * photo_id: str
+    * img: BGR image
+    Take color image and detect 9x9 black grid in shogi board
+    It's assumed that shogi board occupies large portion of img.
+
+    return: None in failure
+    """
+    corners = detect_board_corners(photo_id, img, visualize)
+    if corners is None:
+        return None
+
     # Extract patches
-    patches = extract_patches(
-        depersp_img,
-        xs[best_offset[0] : best_offset[0] + 10],
-        ys[best_offset[1] : best_offset[1] + 10])
+    patches = extract_patches_by_corners(img, corners)
 
     if derive is not None:
         if derive.derive_emptiness:
@@ -676,21 +743,9 @@ def detect_board(photo_id, img, visualize=False, derive=None):
         if derive.derive_validness:
             derive_validness_samples(photo_id, patches, grid_pattern)
 
-    corners_depersp = np.array([
-        (xs[best_offset[0]], ys[best_offset[1]]),
-        (xs[best_offset[0]], ys[best_offset[1] + 9]),
-        (xs[best_offset[0] + 9], ys[best_offset[1] + 9]),
-        (xs[best_offset[0] + 9], ys[best_offset[1]])
-    ])
-
-    corners_org_small = cv2.perspectiveTransform(
-        np.array([corners_depersp]), la.inv(persp_trans))[0]
-    corners_org = corners_org_small / resize_factor
-
-    # TODO: transform back to image space
-    # we need original perspective transform here!
     return {
-        "corners": corners_org
+        "corners": corners,
+        "patches": patches
     }
 
 
@@ -851,17 +906,20 @@ def process_image(packed_args):
         detected = detect_board(
             str(photo_id), img, visualize=args.debug, derive=args)
         if detected is not None:
-            if args.guess_grid:
-                with sqlite3.connect(db_path) as conn:
-                    corners_truth = conn.execute(
-                        "select corners_truth from photos where id = ?",
-                        (photo_id,)).fetchone()[0]
-                    if not corners_truth:
-                        print("Writing", detected["corners"])
-                        conn.execute(
-                            'update photos set corners=? where id = ?',
-                            (json.dumps(map(list, detected["corners"])), photo_id))
-                        conn.commit()
+            with sqlite3.connect(db_path) as conn:
+                corners_truth, config_truth = conn.execute(
+                    """select corners_truth, config_truth
+                    from photos where id = ?""",
+                    (photo_id,)).fetchone()[0]
+                if args.guess_grid and not corners_truth:
+                    print("Writing", detected["corners"])
+                    conn.execute(
+                        'update photos set corners=? where id = ?',
+                        (json.dumps(map(list, detected["corners"])), photo_id))
+                    conn.commit()
+                if args.guess_config and corners_truth and not config_truth:
+                    # TODO: implement patch classification
+                    pass
 
             return {
                 "loaded": 1,
@@ -902,6 +960,9 @@ Extract 9x9 cells from photos of shogi board.""",
     parser.add_argument(
         '--guess-grid', action='store_true',
         help='Guess all grid corners not flagged as ground-truth')
+    parser.add_argument(
+        '--guess-config', action='store_true',
+        help='Guess cell configuration for images with groundtruth grid')
     parser.add_argument(
         '--debug', action='store_true',
         help='Dump debug images to ./debug/. Also fix random.seed.')
