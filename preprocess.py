@@ -473,7 +473,7 @@ def extract_patches_by_corners(image, corners, margin=0.1, patch_size=80):
     <->|<------->|<->
     margin        margin
     """
-    cell_px = patch_size / (1 + margin * 2)
+    cell_px = int(patch_size / (1 + margin * 2))
     margin_px = int(cell_px * margin)
     depersp_size = cell_px * 9 + margin_px * 2
     pts_correct = []
@@ -499,7 +499,7 @@ def extract_patches_by_corners(image, corners, margin=0.1, patch_size=80):
         for iy in range(1, 10):
             x0 = (9 - ix) * cell_px
             y0 = (iy - 1) * cell_px
-            patches[(ix, iy)] = img_depersp[x0:x0+patch_size, y0:y0+patch_size]
+            patches[(ix, iy)] = img_depersp[y0:y0+patch_size, x0:x0+patch_size]
     return patches
 
 
@@ -897,20 +897,36 @@ def process_image(packed_args):
 
     try:
         with sqlite3.connect(db_path) as conn:
-            image_blob = conn.execute(
-                'select image from photos where id = ?',
-                (photo_id,)).fetchone()[0]
+            image_blob, corners_truth, corners, config_truth, config = conn.execute(
+                """select image, corners_truth, corners, config_truth, config
+                from photos where id = ?""",
+                (photo_id,)).fetchone()
             img = cv2.imdecode(
                 np.fromstring(image_blob, np.uint8), cv.CV_LOAD_IMAGE_COLOR)
         print('processing: id=%s shape=%s' % (photo_id, img.shape))
+
+        if args.derive_cells:
+            if corners_truth and config_truth:
+                print('Extracting')
+                corners = json.loads(corners)
+                config = json.loads(config)
+                patches = extract_patches_by_corners(img, corners)
+                for (key, image) in patches.items():
+                    key_str = "%d%d" % key
+                    cell_st = config[key_str]
+                    path = '%d-%s-%s-%s.png' % (
+                        photo_id, key_str, cell_st["state"], cell_st["type"])
+                    cv2.imwrite(os.path.join('derived/cells', path), image)
+                return {
+                    "success": 1
+                }
+            else:
+                return {}
+
         detected = detect_board(
             str(photo_id), img, visualize=args.debug, derive=args)
         if detected is not None:
             with sqlite3.connect(db_path) as conn:
-                corners_truth, config_truth = conn.execute(
-                    """select corners_truth, config_truth
-                    from photos where id = ?""",
-                    (photo_id,)).fetchone()[0]
                 if args.guess_grid and not corners_truth:
                     print("Writing", detected["corners"])
                     conn.execute(
@@ -958,6 +974,9 @@ Extract 9x9 cells from photos of shogi board.""",
         '--derive-validness', action='store_true',
         help='Derive validness training data')
     parser.add_argument(
+        '--derive-cells', action='store_true',
+        help='Derive all cell samples for caffe')
+    parser.add_argument(
         '--guess-grid', action='store_true',
         help='Guess all grid corners not flagged as ground-truth')
     parser.add_argument(
@@ -978,6 +997,8 @@ Extract 9x9 cells from photos of shogi board.""",
         clean_directory("derived/cells-types-up")
     if args.derive_validness:
         clean_directory("derived/cells-validness")
+    if args.derive_cells:
+        clean_directory("derived/cells")
 
     pid_blacklist = set(args.blacklist)
 
@@ -1000,3 +1021,28 @@ Extract 9x9 cells from photos of shogi board.""",
         for (k, v) in result.items():
             count[k] = count.get(k, 0) + v
     print(count)
+
+    # Create text list file from directory content (images).
+    cell_to_id = {}
+    cell_to_id[("empty", "empty")] = 0
+    for (i, t) in enumerate(shogi.all_types):
+        cell_to_id[("up", t)] = 1 + i
+        cell_to_id[("down", t)] = 1 + len(shogi.all_types) + i
+
+    if args.derive_cells:
+        ratio_train = 0.8
+        ls = []
+        for p in os.listdir("derived/cells"):
+            c_state, c_type = p.split('.')[-2].split('-')[2:]
+            c_id = cell_to_id[(c_state, c_type)]
+            ls.append((os.path.join("derived/cells", p), c_id))
+        random.shuffle(ls)
+        n_train = int(len(ls) * ratio_train)
+        with open('derived/cells/train.txt', 'w') as f:
+            for entry in ls[:n_train]:
+                f.write('%s %d\n' % entry)
+        with open('derived/cells/test.txt', 'w') as f:
+            for entry in ls[n_train:]:
+                f.write('%s %d\n' % entry)
+        print('%d training + %d test sampes derived' % (
+            n_train, len(ls) - n_train))

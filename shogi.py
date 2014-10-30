@@ -1,7 +1,7 @@
 
-all_types = set([
+all_types = [
     'FU', 'KY', 'KE', 'GI', 'KI', 'KA', 'HI',
-    'TO', 'NY', 'NK', 'NG', 'UM', 'RY', 'OU'])
+    'TO', 'NY', 'NK', 'NG', 'UM', 'RY', 'OU']
 
 
 def get_initial_configuration():

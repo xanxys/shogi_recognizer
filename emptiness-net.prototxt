@@ -26,7 +26,7 @@ layers {
   top: "label"
   image_data_param {
     source: "temp-input-test.txt"
-    batch_size: 20
+    batch_size: 200
     new_width: 20
     new_height: 20
   }
@@ -48,7 +48,7 @@ layers {
   bottom: "flatten"
   top: "fc1"
   inner_product_param {
-    num_output: 100
+    num_output: 500
   }
 }
 layers {
