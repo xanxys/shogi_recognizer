@@ -1,0 +1,84 @@
+name: "emptiness-simple"
+#input_dim: 1
+#input_dim: 1
+#input_dim: 20
+#input_dim: 20
+layers {
+  name: "data_source"
+  type: IMAGE_DATA
+  top: "data"
+  top: "label"
+  image_data_param {
+    source: "temp-input-train.txt"
+    batch_size: 20
+    new_width: 20
+    new_height: 20
+  }
+  transform_param {
+    scale: 0.0039215684
+  }
+  include { phase: TRAIN }
+}
+layers {
+  name: "data_source"
+  type: IMAGE_DATA
+  top: "data"
+  top: "label"
+  image_data_param {
+    source: "temp-input-test.txt"
+    batch_size: 20
+    new_width: 20
+    new_height: 20
+  }
+  transform_param {
+    scale: 0.0039215684
+  }
+  include { phase: TEST }
+}
+# flatten data into 400 dim vector
+layers {
+  name: "flatten"
+  type: FLATTEN
+  bottom: "data"
+  top: "flatten"
+}
+layers {
+  name: "fc1"
+  type: INNER_PRODUCT
+  bottom: "flatten"
+  top: "fc1"
+  inner_product_param {
+    num_output: 100
+  }
+}
+layers {
+  name: "fc1_s"
+  type: SIGMOID
+  bottom: "fc1"
+  top: "fc1_s"
+}
+# fc1_s: 100 hidden units
+layers {
+  name: "fc2"
+  type: INNER_PRODUCT
+  bottom: "fc1_s"
+  top: "fc2"
+  inner_product_param {
+    num_output: 2
+  }
+}
+layers {
+  name: "category"
+  type: SOFTMAX_LOSS
+  bottom: "fc2"
+  bottom: "label"
+  top: "category"
+}
+layers {
+  name: "accuracy"
+  type: ACCURACY
+  bottom: "fc2"
+  bottom: "label"
+  top: "accuracy"
+  include: { phase: TEST }
+}
