@@ -914,9 +914,20 @@ def process_image(packed_args):
                 for (key, image) in patches.items():
                     key_str = "%d%d" % key
                     cell_st = config[key_str]
+                    # direct
                     path = '%d-%s-%s-%s.png' % (
                         photo_id, key_str, cell_st["state"], cell_st["type"])
                     cv2.imwrite(os.path.join('derived/cells', path), image)
+                    # flipped
+                    flipped_directions = {
+                        'empty': 'empty',
+                        'up': 'down',
+                        'down': 'up'
+                    }
+                    path_f = '%d-%sF-%s-%s.png' % (
+                        photo_id, key_str, flipped_directions[cell_st["state"]], cell_st["type"])
+                    image_f = image[::-1, ::-1]
+                    cv2.imwrite(os.path.join('derived/cells', path_f), image_f)
                 return {
                     "success": 1
                 }
