@@ -45,55 +45,105 @@ input_dim: 80
 
 common_layers = '''
 name: "cells-simple"
+# convolution - relu - max pool
 layers {
-  name: "flatten"
-  type: FLATTEN
+  name: "conv1"
+  type: CONVOLUTION
   bottom: "data"
-  top: "flatten"
+  top: "conv1"
+  convolution_param {
+    num_output: 15
+    kernel_size: 5
+    stride: 4
+    weight_filler {
+      type: "xavier"
+    }
+  }
 }
+layers {
+  name: "relu1"
+  type: RELU
+  bottom: "conv1"
+  top: "relu1"
+}
+layers {
+  name: "pool1"
+  type: POOLING
+  bottom: "relu1"
+  top: "pool1"
+  pooling_param {
+    pool: MAX
+    kernel_size: 3
+    stride: 2
+  }
+}
+# convolution - relu - max pool
+layers {
+  name: "conv2"
+  type: CONVOLUTION
+  bottom: "pool1"
+  top: "conv2"
+  convolution_param {
+    num_output: 15
+    kernel_size: 5
+    stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+  }
+}
+layers {
+  name: "relu2"
+  type: RELU
+  bottom: "conv2"
+  top: "relu2"
+}
+layers {
+  name: "pool2"
+  type: POOLING
+  bottom: "relu2"
+  top: "pool2"
+  pooling_param {
+    pool: MAX
+    kernel_size: 3
+    stride: 2
+  }
+}
+# fully connected layers
 layers {
   name: "fc1"
   type: INNER_PRODUCT
-  bottom: "flatten"
+  bottom: "pool2"
   top: "fc1"
   inner_product_param {
     num_output: 100
+    weight_filler {
+      type: "xavier"
+    }
   }
 }
 layers {
   name: "fc1_s"
-  type: SIGMOID
+  type: RELU
   bottom: "fc1"
   top: "fc1_s"
 }
 layers {
+  name: "fc1_d"
+  type: DROPOUT
+  bottom: "fc1_s"
+  top: "fc1_sd"
+}
+layers {
   name: "fc2"
   type: INNER_PRODUCT
-  bottom: "fc1_s"
+  bottom: "fc1_sd"
   top: "fc2"
   inner_product_param {
-    num_output: 100
-  }
-}
-layers {
-  name: "fc2_s"
-  type: SIGMOID
-  bottom: "fc2"
-  top: "fc2_s"
-}
-layers {
-  name: "fc2_d"
-  type: DROPOUT
-  bottom: "fc2_s"
-  top: "fc2_sd"
-}
-layers {
-  name: "fc3"
-  type: INNER_PRODUCT
-  bottom: "fc2_sd"
-  top: "fc3"
-  inner_product_param {
     num_output: 29
+    weight_filler {
+      type: "xavier"
+    }
   }
 }
 '''
@@ -102,7 +152,7 @@ train_layers = '''
 layers {
   name: "category"
   type: SOFTMAX_LOSS
-  bottom: "fc3"
+  bottom: "fc2"
   bottom: "label"
   top: "category"
   include: { phase: TRAIN }
@@ -110,7 +160,7 @@ layers {
 layers {
   name: "accuracy"
   type: ACCURACY
-  bottom: "fc3"
+  bottom: "fc2"
   bottom: "label"
   top: "accuracy"
   include: { phase: TEST }
@@ -121,7 +171,7 @@ deploy_layers = '''
 layers {
   name: "category"
   type: SOFTMAX
-  bottom: "fc3"
+  bottom: "fc2"
   top: "category"
 }
 '''

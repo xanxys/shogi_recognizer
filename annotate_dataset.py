@@ -132,7 +132,7 @@ def post_photo(photo_id):
         raw_config = raw_query['config']
         if type(raw_config) is not dict:
             raise APIUsageError('config must be object')
-        all_types = shogi.all_types | set(['empty'])
+        all_types = set(shogi.all_types) | set(['empty'])
         for (k, v) in raw_config.items():
             if re.match('^[1-9][1-9]$', k) is None:
                 raise APIUsageError('Invalid key: %s' % k)

@@ -1017,6 +1017,27 @@ def process_image(packed_args):
         }
 
 
+def balance_samples(ls, key_func):
+    """
+    Remove elements from ls so that
+    number of elements for each key (extracted by key_func)
+    is same for all keys.
+    """
+    key_count = {}
+    for entry in ls:
+        k = key_func(entry)
+        key_count[k] = key_count.get(k, 0) + 1
+    n_per_key = min(key_count.values())
+    count = {}
+    ls_reduced = []
+    for entry in ls:
+        k = key_func(entry)
+        count[k] = count.get(k, 0) + 1
+        if count[k] <= n_per_key:
+            ls_reduced.append(entry)
+    return ls_reduced
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="""
@@ -1095,6 +1116,7 @@ Extract 9x9 cells from photos of shogi board.""",
             c_state, c_type = p.split('.')[-2].split('-')[2:]
             c_id = cell_to_id[(c_state, c_type)]
             ls.append((os.path.join("derived/cells", p), c_id))
+        # ls = balance_samples(ls, lambda e: e[1])
         random.shuffle(ls)
         n_train = int(len(ls) * ratio_train)
         with open('derived/cells/train.txt', 'w') as f:
