@@ -231,6 +231,15 @@ $.ajax('/photos').done(function(resp) {
 		});
 	});
 
+	$('#btn_uncertain_config').click(function() {
+		$.ajax('/photos?uncertain_config').done(function(resp) {
+			metadata = resp.results;
+			curr_ix = 0;
+			update_nav_status();
+			recreate_editor_from_current_index();
+		});
+	});
+
 	update_nav_status();
 	recreate_editor_from_current_index();
 });

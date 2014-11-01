@@ -64,11 +64,14 @@ def photos():
     Don't return images themselves.
     """
     filter_unc_corners = flask.request.args.get('uncertain_corners') is not None
+    filter_unc_config = flask.request.args.get('uncertain_config') is not None
 
     results = []
-    for (pid, corners, corners_truth, initial, initial_truth) in flask.g.db.execute(
-            'select id, corners, corners_truth, initial, initial_truth from photos'):
+    for (pid, corners, corners_truth, initial, initial_truth, config, config_truth) in flask.g.db.execute(
+            'select id, corners, corners_truth, initial, initial_truth, config, config_truth from photos'):
         if filter_unc_corners and corners_truth:
+            continue
+        if filter_unc_config and config_truth:
             continue
         results.append({
             "id": pid,
