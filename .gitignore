@@ -3,5 +3,8 @@ debug/
 *.sublime-*
 *.pyc
 
+# generated neural net definitions
+cells-net*.prototxt
+
 # deprecated
 derived/

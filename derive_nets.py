@@ -1,4 +1,6 @@
-name: "cells-simple"
+#!/bin/python3
+
+train_inputs = '''
 layers {
   name: "data_source"
   type: IMAGE_DATA
@@ -31,6 +33,18 @@ layers {
   }
   include { phase: TEST }
 }
+'''
+
+deploy_inputs = '''
+input: "data"
+input_dim: 1
+input_dim: 3
+input_dim: 80
+input_dim: 80
+'''
+
+common_layers = '''
+name: "cells-simple"
 layers {
   name: "flatten"
   type: FLATTEN
@@ -82,13 +96,16 @@ layers {
     num_output: 29
   }
 }
-# evaluation layers
+'''
+
+train_layers = '''
 layers {
   name: "category"
   type: SOFTMAX_LOSS
   bottom: "fc3"
   bottom: "label"
   top: "category"
+  include: { phase: TRAIN }
 }
 layers {
   name: "accuracy"
@@ -98,3 +115,23 @@ layers {
   top: "accuracy"
   include: { phase: TEST }
 }
+'''
+
+deploy_layers = '''
+layers {
+  name: "category"
+  type: SOFTMAX
+  bottom: "fc3"
+  top: "category"
+}
+'''
+
+if __name__ == '__main__':
+    with open('cells-net-train.prototxt', 'w') as f:
+        f.write(train_inputs)
+        f.write(common_layers)
+        f.write(train_layers)
+    with open('cells-net-deploy.prototxt', 'w') as f:
+        f.write(deploy_inputs)
+        f.write(common_layers)
+        f.write(deploy_layers)

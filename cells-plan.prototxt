@@ -1,4 +1,4 @@
-net: "cells-net.prototxt"
+net: "cells-net-train.prototxt"
 test_iter: 100
 test_interval: 500
 base_lr: 0.01

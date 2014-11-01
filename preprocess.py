@@ -18,6 +18,29 @@ import sqlite3
 import lsd
 import json
 import shogi
+import caffe
+
+
+def get_cell_to_id():
+    """
+    Get cell state to integer id mapping.
+    return: dict(cell -> id)
+        where
+            cell: (state, type)
+            state: "empty" / "up" / "down"
+            type: "FU"..."OU"
+            id: int [0, 29)
+    """
+    cell_to_id = {}
+    cell_to_id[("empty", "empty")] = 0
+    for (i, t) in enumerate(shogi.all_types):
+        cell_to_id[("up", t)] = 1 + i
+        cell_to_id[("down", t)] = 1 + len(shogi.all_types) + i
+    return cell_to_id
+
+
+def get_id_to_cell():
+    return {i: c for (c, i) in get_cell_to_id().items()}
 
 
 def clean_directory(dir_path):
@@ -933,30 +956,60 @@ def process_image(packed_args):
                 }
             else:
                 return {}
-
-        detected = detect_board(
-            str(photo_id), img, visualize=args.debug, derive=args)
-        if detected is not None:
-            with sqlite3.connect(db_path) as conn:
-                if args.guess_grid and not corners_truth:
-                    print("Writing", detected["corners"])
+        elif args.guess_config:
+            if corners_truth and not config_truth:
+                corners = json.loads(corners)
+                patches = extract_patches_by_corners(img, corners)
+                id_to_cell = get_id_to_cell()
+                classifier = caffe.Classifier(
+                    "./cells-net-deploy.prototxt",
+                    "./params/cells.caffemodel",
+                    raw_scale=255,
+                    image_dims=(80, 80))
+                classifier.set_phase_test()
+                config = {}
+                for (key, image) in patches.items():
+                    key_str = "%d%d" % key
+                    probs = classifier.predict([image], False)[0]
+                    id_likely = np.argmax(probs)
+                    prob_likely = probs[id_likely]
+                    state_likely, type_likely = id_to_cell[id_likely]
+                    print("%s %s: %.1f%%" % (
+                        state_likely, type_likely, prob_likely * 100))
+                    config[key_str] = {
+                        "state": state_likely,
+                        "type": type_likely
+                    }
+                with sqlite3.connect(db_path) as conn:
                     conn.execute(
-                        'update photos set corners=? where id = ?',
-                        (json.dumps(map(list, detected["corners"])), photo_id))
+                        'update photos set config=? where id = ?',
+                        (json.dumps(config), photo_id))
                     conn.commit()
-                if args.guess_config and corners_truth and not config_truth:
-                    # TODO: implement patch classification
-                    pass
-
-            return {
-                "loaded": 1,
-                "success": 1
-            }
+                json.dumps(config)
+                return {
+                    "success": 1
+                }
+            else:
+                return {}
         else:
-            return {
-                "loaded": 1
-            }
-            print('->failed')
+            detected = detect_board(
+                str(photo_id), img, visualize=args.debug, derive=args)
+            if detected is not None:
+                with sqlite3.connect(db_path) as conn:
+                    if args.guess_grid and not corners_truth:
+                        print("Writing", detected["corners"])
+                        conn.execute(
+                            'update photos set corners=? where id = ?',
+                            (json.dumps(map(list, detected["corners"])), photo_id))
+                        conn.commit()
+                return {
+                    "loaded": 1,
+                    "success": 1
+                }
+            else:
+                return {
+                    "loaded": 1
+                }
     except:
         traceback.print_exc()
         return {
@@ -1034,12 +1087,7 @@ Extract 9x9 cells from photos of shogi board.""",
     print(count)
 
     # Create text list file from directory content (images).
-    cell_to_id = {}
-    cell_to_id[("empty", "empty")] = 0
-    for (i, t) in enumerate(shogi.all_types):
-        cell_to_id[("up", t)] = 1 + i
-        cell_to_id[("down", t)] = 1 + len(shogi.all_types) + i
-
+    cell_to_id = get_cell_to_id()
     if args.derive_cells:
         ratio_train = 0.8
         ls = []

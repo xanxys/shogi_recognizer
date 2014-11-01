@@ -2,42 +2,25 @@ Shogi Recognizer
 ================
 Detect shogi (chess-like game) board state from photo.
 
-
-Bootstrapping
+Usage
 ----------
-Written here for reference. However this procedure is
-not programatically reproducible, because
-it's very hard and non-rewarding to maintain programs to insert manual
-annotation (mostly rejection of failed samples) here and there.
+Run `./derive_nets.py`.
 
-1. Prepare photos with boards in the initial configuration `D0`
-2. Extract piece patches from `D0` using (non-ML) image processing pipeline
-3. Collect empty vs. non-empty labels using rotation-invariance, and train classifier `C0`
-4. Use `C0` to `D0` and guess rotation
-5. With rotations, we get labels for empty and non-promoted piece types , train classifier `C1` (also re-train `C0` -> `C0'`)
-6. Train cell validness classifier `C2` using `D0` (__<- we're here__)
-7. Use `C2` to aid grid estimation in step 2
+See `./analyze.py` for further usage.
 
 
-Dataset & Classifiers
+Training
 ----------
-### emptiness
-* input: 80x80 RGB image of valid cell
-* output: {empty, occupied} (2 categories)
+Use `./manage_dataset.py` to import images.
+Run `./annotate_dataset.py` and its web UI to annotate images.
 
-### types-up
-* input: 80x80 RGB image of valid cell, piece must point upward if applicable
-* output: {empty, FU, ..., OU} (15 categories)
 
-### validness
-* input: 80x80 RGB image of valid cell OR invalid patches generated from incorrect grid estimation
-* output: {invalid, valid} (2 categories)
+Run `./derive_nets.py`.
+`$(CAFFE_ROOT)/build/tools/caffe train -solver cells-plan.prototxt`
 
-### Word definitions
-#### valid cell
-A cell with or without a piece. If a piece exists, it must point one
-of the 4 directions. Also, cell square must be contained completely
-in the image (touching edge is ok).
+Move the final `cells_iter_*.caffemodel` to `params/cells.caffemodel`
+
+Now it's ready!
 
 
 Programs
