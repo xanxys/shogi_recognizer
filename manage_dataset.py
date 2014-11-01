@@ -4,8 +4,9 @@ import argparse
 import hashlib
 import os
 import os.path
-import string
 import sqlite3
+import shogi
+import json
 
 # *_truth: true if it's confirmed by human
 # state: {"empty", "up", "down"}
@@ -62,6 +63,11 @@ File extensions will be lowercased.""",
     parser.add_argument(
         '--remove-duplicate', action='store_true',
         help='Remove duplicated ids')
+    # Apply initial to config (transitional)
+    # TODO: remove this functionality after removal of initial field
+    parser.add_argument(
+        '--apply-initial', action='store_true',
+        help='Set config from initial (if initial_truth=1)')
 
     args = parser.parse_args()
     already_exist = os.path.isfile(args.existing[0])
@@ -85,6 +91,13 @@ File extensions will be lowercased.""",
         conn.executemany(
             "delete from photos where id = ?",
             [(rowid,) for rowid in rows_to_remove])
+    elif args.apply_initial:
+        config_initial_json = json.dumps(
+            shogi.get_initial_configuration_with_dir())
+        conn.execute(
+            """update photos set config=?, config_truth=1
+            where initial = 1 and initial_truth = 1""",
+            (config_initial_json, ))
     elif args.merge is not None:
         for path in os.listdir(args.merge):
             path_src = os.path.join(args.merge, path)
