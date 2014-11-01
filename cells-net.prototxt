@@ -7,8 +7,8 @@ layers {
   image_data_param {
     source: "derived/cells/train.txt"
     batch_size: 32
-    new_width: 20
-    new_height: 20
+    new_width: 80
+    new_height: 80
   }
   transform_param {
     scale: 0.0039215684
@@ -23,8 +23,8 @@ layers {
   image_data_param {
     source: "derived/cells/test.txt"
     batch_size: 32
-    new_width: 20
-    new_height: 20
+    new_width: 80
+    new_height: 80
   }
   transform_param {
     scale: 0.0039215684
