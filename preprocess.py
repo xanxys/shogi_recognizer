@@ -911,6 +911,39 @@ def derive_empty_vs_nonempty_samples(photo_id, patches):
             patches[pos]["image"])
 
 
+class BoardConfigDetector(object):
+    def __init__(self):
+        self.classifier = caffe.Classifier(
+            "./cells-net-deploy.prototxt",
+            "./params/cells.caffemodel",
+            raw_scale=255,
+            image_dims=(80, 80))
+        self.classifier.set_phase_test()
+
+    def detect(self, image, corners, print_debug=False):
+        """
+        image: BGR image (OpenCV standard format)
+        corners: 4 points of corners
+        """
+        patches = extract_patches_by_corners(image, corners)
+        id_to_cell = get_id_to_cell()
+        config = {}
+        for (key, image) in patches.items():
+            key_str = "%d%d" % key
+            probs = self.classifier.predict([image], False)[0]
+            id_likely = np.argmax(probs)
+            prob_likely = probs[id_likely]
+            state_likely, type_likely = id_to_cell[id_likely]
+            if print_debug:
+                print("%s %s: %.1f%%" % (
+                    state_likely, type_likely, prob_likely * 100))
+            config[key_str] = {
+                "state": state_likely,
+                "type": type_likely
+            }
+        return config
+
+
 def process_image(packed_args):
     db_path, photo_id, args = packed_args
     print(db_path, photo_id)
@@ -959,27 +992,8 @@ def process_image(packed_args):
         elif args.guess_config:
             if corners_truth and not config_truth:
                 corners = json.loads(corners)
-                patches = extract_patches_by_corners(img, corners)
-                id_to_cell = get_id_to_cell()
-                classifier = caffe.Classifier(
-                    "./cells-net-deploy.prototxt",
-                    "./params/cells.caffemodel",
-                    raw_scale=255,
-                    image_dims=(80, 80))
-                classifier.set_phase_test()
-                config = {}
-                for (key, image) in patches.items():
-                    key_str = "%d%d" % key
-                    probs = classifier.predict([image], False)[0]
-                    id_likely = np.argmax(probs)
-                    prob_likely = probs[id_likely]
-                    state_likely, type_likely = id_to_cell[id_likely]
-                    print("%s %s: %.1f%%" % (
-                        state_likely, type_likely, prob_likely * 100))
-                    config[key_str] = {
-                        "state": state_likely,
-                        "type": type_likely
-                    }
+                config_detector = BoardConfigDetector()
+                config = config_detector.detect(img, corners, print_debug=True)
                 with sqlite3.connect(db_path) as conn:
                     conn.execute(
                         'update photos set config=? where id = ?',
@@ -988,6 +1002,21 @@ def process_image(packed_args):
                 json.dumps(config)
                 return {
                     "success": 1
+                }
+            else:
+                return {}
+        elif args.test_guess_config:
+            if corners_truth and config_truth:
+                corners = json.loads(corners)
+                config = json.loads(config)
+                config_detector = BoardConfigDetector()
+                config_guess = config_detector.detect(img, corners, print_debug=True)
+                n_matches = sum(
+                    1 if config[k] == v else 0 for (k, v) in config_guess.items())
+                return {
+                    "success": 1,
+                    "matches": n_matches,
+                    "checked": 9 ** 2
                 }
             else:
                 return {}
@@ -1067,6 +1096,9 @@ Extract 9x9 cells from photos of shogi board.""",
     parser.add_argument(
         '--guess-config', action='store_true',
         help='Guess cell configuration for images with groundtruth grid')
+    parser.add_argument(
+        '--test-guess-config', action='store_true',
+        help='Calculate accuracy by comparing ground truth and guess')
     parser.add_argument(
         '--debug', action='store_true',
         help='Dump debug images to ./debug/. Also fix random.seed.')
